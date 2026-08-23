@@ -36,6 +36,75 @@ Each consuming repository continues to own:
 
 The rollout will not synchronize complete files from the TypeScript Node template into existing repositories. That would overwrite intentional differences, particularly Lunch Money's use of Bun and HomeExchange's use of npm.
 
+## Uniform project contract
+
+HomeExchange and Lunch Money should share the same engineering contract. Runtime-specific commands implement that contract differently, but they should produce equivalent outcomes.
+
+The common contract is:
+
+- Strict TypeScript with the same safety flags
+- ECMAScript modules unless a documented compatibility constraint requires otherwise
+- Exact dependency versions and a committed lockfile
+- A pinned runtime and package-manager version
+- Standard `lint`, `typecheck`, `test`, `test:coverage`, `build`, and `check` scripts
+- Oxlint for source linting
+- At least 80 percent coverage for every metric reported by the selected runtime
+- A frozen, lifecycle-script-safe dependency installation in CI
+- A production dependency audit in CI
+- Conventional pull request titles and squash commits
+- CodeQL with `security-extended` queries
+- High-severity pull request dependency review
+- SonarQube Cloud analysis with repository-specific project identifiers
+- Release Please using the organization `RELEASE_TOKEN`
+- Dependabot for package and GitHub Actions dependencies
+- Immutable GitHub Action references with Dependabot-managed updates
+- Minimal workflow permissions, concurrency cancellation, and timeouts
+- Provider-neutral `AGENTS.md`, security guidance, contribution guidance, issue forms, and pull request guidance
+- Secret-safe ignore rules and environment examples
+
+Projects may add domain-specific checks after the shared contract. For example, Lunch Money keeps dependency-cruiser architecture validation and financial-data safeguards. HomeExchange keeps trusted-origin validation and session-data safeguards.
+
+## Runtime adapters
+
+Only the runtime implementation is intentionally different:
+
+| Concern | HomeExchange and Node template | Lunch Money |
+| --- | --- | --- |
+| Runtime | Node.js 22 | Bun |
+| Package manager | npm | Bun |
+| Version marker | `.nvmrc` and `.node-version` | Bun version marker supported by the setup Action |
+| Lockfile | `package-lock.json` | `bun.lock` |
+| Frozen install | `npm ci` | `bun install --frozen-lockfile --ignore-scripts` |
+| Production audit | `npm audit --omit=dev --audit-level=high` | `bun audit --production` |
+| Test implementation | Vitest with V8 coverage | Bun test with coverage |
+
+Both adapters finish by running the same project-level `check` contract. Shared governance workflows do not need to know which runtime a project uses.
+
+Vitest reports branches, functions, lines, and statements. Bun's native coverage thresholds currently report functions, lines, and statements but do not expose an equivalent branch threshold. This is a runtime capability difference, not a policy exception: both projects enforce 80 percent for every metric their selected runner reports.
+
+## Uniform repository rules
+
+The organization ruleset should remain the single baseline for every default branch:
+
+- Pull requests required
+- At least one approval
+- Squash merging only
+- Linear history
+- Force pushes blocked
+- Branch deletion blocked
+
+After both projects expose stable shared check names, a second organization ruleset can target the two TypeScript repositories and require:
+
+- `Quality`
+- `Semantic pull request`
+- `Review dependency changes`
+- Successful CodeQL scanning at medium severity or higher
+- SonarQube Cloud analysis where configured
+
+Repository-level rulesets should contain only genuine exceptions or additional domain requirements. Classic branch protection should not duplicate these rulesets.
+
+Lunch Money currently requires signed commits while HomeExchange does not. This is not part of the initial common baseline. GitHub does not allow a user to squash-merge a signed-commit-protected pull request unless that user authored the pull request, which can conflict with Release Please pull requests authored by a GitHub App or separate maintainer identity. Signed commits should be evaluated in a dedicated phase against the chosen `RELEASE_TOKEN` identity before applying one policy to both repositories.
+
 ## Versioning and trust
 
 Consumer workflows will reference shared workflows by immutable commit SHA. A same-line version comment will identify the corresponding release tag. Dependabot will propose reference updates for review.
