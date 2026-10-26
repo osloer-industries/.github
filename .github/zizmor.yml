@@ -1,0 +1,7 @@
+# actionlint 1.7.12 rejects GitHub's `$/…` self-repository syntax; `./…` is required until
+# rhysd/actionlint supports it (see rhysd/actionlint#711).
+rules:
+  self-repository:
+    ignore:
+      - codeql-javascript-typescript.yml
+      - codeql-gate-ci.yml

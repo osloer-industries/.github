@@ -20,22 +20,91 @@ def is_security_rule(rule: dict[str, Any]) -> bool:
     return props.get("security-severity") is not None
 
 
-def collect_findings(sarif_dir: str, min_rank: int) -> list[dict[str, str]]:
+def tool_components(run: dict[str, Any]) -> list[dict[str, Any]]:
+    tool = run.get("tool") or {}
+    driver = tool.get("driver") or {}
+    extensions = list(tool.get("extensions") or [])
+    return [driver, *extensions]
+
+
+def resolve_rule(run: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    rule_ref = result.get("rule") or {}
+    rule_id = result.get("ruleId") or rule_ref.get("id")
+    if rule_id:
+        for component in tool_components(run):
+            for rule in component.get("rules") or []:
+                if rule.get("id") == rule_id:
+                    return rule
+
+    rule_index = rule_ref.get("index")
+    if rule_index is None:
+        return {}
+
+    tc_ref = rule_ref.get("toolComponent") or {}
+    components = tool_components(run)
+    extensions = (run.get("tool") or {}).get("extensions") or []
+
+    candidates: list[dict[str, Any]] = []
+    tc_index = tc_ref.get("index")
+    if tc_index is not None:
+        if tc_index < len(extensions):
+            candidates.append(extensions[tc_index])
+        if tc_index < len(components):
+            candidates.append(components[tc_index])
+    else:
+        candidates.append(components[0])
+
+    seen: set[int] = set()
+    for component in candidates:
+        ident = id(component)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        rules = component.get("rules") or []
+        if 0 <= rule_index < len(rules):
+            return rules[rule_index]
+    return {}
+
+
+def result_level(result: dict[str, Any], rule: dict[str, Any]) -> str:
+    level = result.get("level")
+    if level is not None:
+        return str(level).lower()
+    default_cfg = rule.get("defaultConfiguration") or {}
+    default_level = default_cfg.get("level")
+    if default_level is not None:
+        return str(default_level).lower()
+    return "warning"
+
+
+def rule_identifier(result: dict[str, Any], rule: dict[str, Any]) -> str:
+    if rule.get("id"):
+        return str(rule["id"])
+    return str(result.get("ruleId") or "")
+
+
+def collect_findings(sarif_dir: str, min_rank: int) -> tuple[list[dict[str, str]], list[str]]:
     findings: list[dict[str, str]] = []
-    for path in glob.glob(os.path.join(sarif_dir, "**", "*.sarif"), recursive=True):
-        with open(path, encoding="utf-8") as handle:
-            document = json.load(handle)
+    errors: list[str] = []
+    paths = sorted(glob.glob(os.path.join(sarif_dir, "**", "*.sarif"), recursive=True))
+    if not paths:
+        errors.append(f"No SARIF files found under {sarif_dir}")
+        return findings, errors
+
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                document = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"Failed to parse SARIF {path}: {exc}")
+            continue
+
         for run in document.get("runs", []):
-            rules = {
-                rule["id"]: rule
-                for rule in run.get("tool", {}).get("driver", {}).get("rules", [])
-            }
             for result in run.get("results", []):
-                rule_id = str(result.get("ruleId", ""))
-                rule = rules.get(rule_id, {})
+                rule = resolve_rule(run, result)
                 if not is_security_rule(rule):
                     continue
-                level = str(result.get("level") or "warning").lower()
+                level = result_level(result, rule)
                 if LEVEL_RANK.get(level, LEVEL_RANK["warning"]) < min_rank:
                     continue
                 location = (result.get("locations") or [{}])[0]
@@ -45,23 +114,30 @@ def collect_findings(sarif_dir: str, min_rank: int) -> list[dict[str, str]]:
                 message = (result.get("message") or {}).get("text") or ""
                 findings.append(
                     {
-                        "rule": rule_id,
+                        "rule": rule_identifier(result, rule),
                         "level": level,
                         "file": str(artifact.get("uri") or ""),
                         "line": str(region.get("startLine") or ""),
                         "message": message,
                     }
                 )
-    return findings
+    return findings, errors
 
 
-def write_summary(findings: list[dict[str, str]], fail_on: str) -> None:
+def write_summary(
+    findings: list[dict[str, str]], fail_on: str, errors: list[str]
+) -> None:
     lines = [
         "## CodeQL security gate (SARIF artifact mode)",
         "",
         f"Threshold: security-tagged rules with SARIF level **{fail_on}** or higher.",
         "",
     ]
+    if errors:
+        lines.append("**Errors:**")
+        for err in errors:
+            lines.append(f"- {err}")
+        lines.append("")
     if not findings:
         lines.append("No matching findings.")
     else:
@@ -95,8 +171,10 @@ def main() -> int:
     if not os.path.isdir(sarif_dir):
         print(f"SARIF directory not found: {sarif_dir}", file=sys.stderr)
         return 2
-    findings = collect_findings(sarif_dir, min_rank)
-    write_summary(findings, fail_on)
+    findings, errors = collect_findings(sarif_dir, min_rank)
+    write_summary(findings, fail_on, errors)
+    if errors:
+        return 2
     return 1 if findings else 0
 
 

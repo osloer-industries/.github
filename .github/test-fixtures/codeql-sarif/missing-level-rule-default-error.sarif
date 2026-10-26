@@ -1,0 +1,51 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "rules": []
+        },
+        "extensions": [
+          {
+            "name": "codeql/javascript-queries",
+            "rules": [
+              {
+                "id": "js/sql-injection",
+                "defaultConfiguration": {
+                  "level": "error"
+                },
+                "properties": {
+                  "tags": ["security"],
+                  "security-severity": "8.8"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "results": [
+        {
+          "ruleId": "js/sql-injection",
+          "message": {
+            "text": "Query built from user-controlled data."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/db.js"
+                },
+                "region": {
+                  "startLine": 7
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
