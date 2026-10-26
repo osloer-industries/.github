@@ -1,6 +1,8 @@
-/** Intentionally vulnerable fixture for live CodeQL gate tests (not scanned by default CI). */
+/** Intentionally vulnerable fixture for live CodeQL gate tests (isolated by analysis-paths). */
+const { exec } = require("node:child_process");
 
-export function runUserCode(userInput) {
-  // eslint-disable-next-line no-eval
-  return eval(userInput);
+function runUserCommand(userCommand) {
+  exec(userCommand);
 }
+
+module.exports = { runUserCommand };

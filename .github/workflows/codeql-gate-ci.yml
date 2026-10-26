@@ -45,7 +45,7 @@ jobs:
           upload: never
           wait-for-processing: false
           post-processed-sarif-path: codeql-sarif
-      - name: Expect gate to fail on js/code-injection
+      - name: Expect gate to fail on live security SARIF
         env:
           FAIL_ON_SARIF_LEVEL: error
           SARIF_DIR: codeql-sarif
