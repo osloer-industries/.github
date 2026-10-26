@@ -59,6 +59,7 @@ jobs:
           repository: osloer-industries/.github
           ref: ${{ steps.standards-ref.outputs.ref }}
           path: _oi-github-standards
+          persist-credentials: false
           sparse-checkout: .github/scripts/codeql-sarif-security-gate.py
           sparse-checkout-cone-mode: false
       - name: Upload CodeQL SARIF artifact
