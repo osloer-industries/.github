@@ -9,7 +9,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | File | Purpose |
 | --- | --- |
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
-| [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS |
+| [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |

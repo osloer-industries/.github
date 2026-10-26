@@ -11,6 +11,19 @@ on:
         description: Job timeout
         type: number
         default: 15
+      code-scanning-upload:
+        description: >-
+          Upload SARIF to GitHub Code Scanning (requires Advanced Security on private repos).
+          When false, SARIF is kept as a workflow artifact and this job fails on security-tagged
+          findings at or above fail-on-sarif-level instead of using the Code Scanning UI.
+        type: boolean
+        default: true
+      fail-on-sarif-level:
+        description: >-
+          Minimum SARIF result level for security-tagged CodeQL rules that fails the job when
+          code-scanning-upload is false. One of error, warning, or note.
+        type: string
+        default: error
 
 jobs:
   analyze:
@@ -25,4 +38,39 @@ jobs:
         with:
           languages: javascript-typescript
           queries: ${{ inputs.queries }}
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - name: Finish CodeQL (Code Scanning upload)
+        if: inputs.code-scanning-upload
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - name: Finish CodeQL (SARIF artifact, no upload)
+        if: ${{ !inputs.code-scanning-upload }}
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          upload: never
+          wait-for-processing: false
+          post-processed-sarif-path: codeql-sarif
+      - name: Resolve reusable workflow ref
+        if: ${{ !inputs.code-scanning-upload }}
+        id: standards-ref
+        run: echo "ref=${GITHUB_WORKFLOW_REF#*@}" >> "$GITHUB_OUTPUT"
+      - name: Fetch SARIF gate script
+        if: ${{ !inputs.code-scanning-upload }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ steps.standards-ref.outputs.ref }}
+          path: _oi-github-standards
+          sparse-checkout: .github/scripts/codeql-sarif-security-gate.py
+          sparse-checkout-cone-mode: false
+      - name: Upload CodeQL SARIF artifact
+        if: ${{ !inputs.code-scanning-upload }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-sarif-${{ github.run_id }}
+          path: codeql-sarif/
+          if-no-files-found: error
+      - name: Enforce security findings threshold
+        if: ${{ !inputs.code-scanning-upload }}
+        env:
+          FAIL_ON_SARIF_LEVEL: ${{ inputs.fail-on-sarif-level }}
+          SARIF_DIR: codeql-sarif
+        run: python3 _oi-github-standards/.github/scripts/codeql-sarif-security-gate.py
