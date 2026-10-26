@@ -1,0 +1,48 @@
+name: Reusable — Node setup smoke matrix
+
+on:
+  workflow_call:
+    inputs:
+      scenarios-json:
+        description: JSON array of setup scenario names
+        type: string
+        default: '["plugin","mcp","npm-package","cli"]'
+      setup-command:
+        description: Setup CLI invocation (scenario substituted as {scenario})
+        type: string
+        default: npm run setup -- --scenario {scenario} --name @smoke/{scenario}-template --yes
+      node-version-file:
+        description: Node version file in the caller repository
+        type: string
+        default: .nvmrc
+      timeout-minutes:
+        description: Per-matrix job timeout
+        type: number
+        default: 15
+
+jobs:
+  setup-smoke:
+    name: Setup smoke (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJson(inputs.scenarios-json) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Run setup scenario
+        env:
+          SETUP_COMMAND: ${{ inputs.setup-command }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          set -euo pipefail
+          cmd="${SETUP_COMMAND//\{scenario\}/${SCENARIO}}"
+          eval "$cmd"
