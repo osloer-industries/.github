@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.12"
+      - name: Verify inline gate matches canonical script
+        run: python3 .github/scripts/codeql_gate_inline.py --check
       - name: Run gate fixture tests
         run: python3 .github/scripts/test_codeql_sarif_security_gate.py
 
@@ -49,16 +51,37 @@ jobs:
           FAIL_ON_SARIF_LEVEL: error
           SARIF_DIR: codeql-sarif
         run: |
-          if python3 .github/scripts/codeql-sarif-security-gate.py; then
+          if python3 .github/scripts/run_shipped_codeql_gate.py; then
             echo "Expected security gate to fail on live CodeQL SARIF"
             exit 1
           fi
           echo "Gate failed as expected on vulnerable fixture"
 
-  reusable-artifact-smoke:
-    name: Reusable CodeQL artifact mode smoke
-    uses: ./.github/workflows/codeql-javascript-typescript.yml
-    with:
-      code-scanning-upload: false
-      fail-on-sarif-level: error
-      source-root: test-fixtures/codeql-smoke
+  artifact-mode-smoke:
+    name: CodeQL artifact mode smoke (reusable steps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+          source-root: test-fixtures/codeql-smoke
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          upload: never
+          wait-for-processing: false
+          post-processed-sarif-path: codeql-sarif
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codeql-sarif-smoke-${{ github.run_id }}
+          path: codeql-sarif/
+          if-no-files-found: error
+      - name: Enforce security findings threshold (shipped inline gate)
+        env:
+          FAIL_ON_SARIF_LEVEL: error
+          SARIF_DIR: codeql-sarif
+        run: python3 .github/scripts/run_shipped_codeql_gate.py

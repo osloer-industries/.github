@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GATE = REPO_ROOT / ".github/scripts/codeql-sarif-security-gate.py"
+SHIPPED_GATE = REPO_ROOT / ".github/scripts/run_shipped_codeql_gate.py"
 FIXTURES = REPO_ROOT / ".github/test-fixtures/codeql-sarif"
 
 
@@ -22,7 +22,7 @@ def run_gate(sarif_dir: Path, fail_on: str = "error") -> subprocess.CompletedPro
     env["FAIL_ON_SARIF_LEVEL"] = fail_on
     env.pop("GITHUB_STEP_SUMMARY", None)
     return subprocess.run(
-        [sys.executable, str(GATE)],
+        [sys.executable, str(SHIPPED_GATE)],
         env=env,
         capture_output=True,
         text=True,
