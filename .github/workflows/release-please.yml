@@ -1,0 +1,34 @@
+name: Reusable — Release Please
+
+on:
+  workflow_call:
+    secrets:
+      RELEASE_TOKEN:
+        description: Token with contents, issues, and pull-request write for release PRs
+        required: true
+    inputs:
+      config-file:
+        description: Release Please config path in the caller repository
+        type: string
+        default: release-please-config.json
+      manifest-file:
+        description: Release Please manifest path in the caller repository
+        type: string
+        default: .release-please-manifest.json
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 10
+
+jobs:
+  release-please:
+    name: Prepare or publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - name: Create or update release pull request
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          config-file: ${{ inputs.config-file }}
+          manifest-file: ${{ inputs.manifest-file }}

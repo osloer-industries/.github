@@ -1,0 +1,77 @@
+name: Reusable — Node/npm quality
+
+on:
+  workflow_call:
+    inputs:
+      node-version-file:
+        description: Node version file in the caller repository
+        type: string
+        default: .nvmrc
+      check-npm-script:
+        description: npm script for lint, typecheck, coverage, build (runs npm run)
+        type: string
+        default: check
+      npm-ci-ignore-scripts:
+        description: Pass --ignore-scripts to npm ci
+        type: boolean
+        default: true
+      audit-level:
+        description: npm audit --audit-level value
+        type: string
+        default: high
+      npm-prefixes-json:
+        description: JSON array of extra --prefix paths for npm ci and audit (monorepo helpers)
+        type: string
+        default: "[]"
+      job-name:
+        description: GitHub check name shown for this job
+        type: string
+        default: Quality
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 10
+
+jobs:
+  quality:
+    name: ${{ inputs.job-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+      - name: Install dependencies
+        env:
+          NPM_CI_IGNORE_SCRIPTS: ${{ inputs.npm-ci-ignore-scripts }}
+          NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
+        run: |
+          set -euo pipefail
+          flags=""
+          if [ "$NPM_CI_IGNORE_SCRIPTS" = "true" ]; then
+            flags="--ignore-scripts"
+          fi
+          npm ci $flags
+          echo "$NPM_PREFIXES_JSON" | jq -r '.[]' | while read -r prefix; do
+            [ -n "$prefix" ] || continue
+            npm ci $flags --prefix "$prefix"
+          done
+      - name: Audit production dependencies
+        env:
+          NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
+          AUDIT_LEVEL: ${{ inputs.audit-level }}
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev --audit-level="$AUDIT_LEVEL"
+          echo "$NPM_PREFIXES_JSON" | jq -r '.[]' | while read -r prefix; do
+            [ -n "$prefix" ] || continue
+            npm audit --omit=dev --audit-level="$AUDIT_LEVEL" --prefix "$prefix"
+          done
+      - name: Run check
+        env:
+          NPM_SCRIPT: ${{ inputs.check-npm-script }}
+        run: npm run "$NPM_SCRIPT"

@@ -1,0 +1,52 @@
+name: Reusable — Node setup smoke matrix
+
+on:
+  workflow_call:
+    inputs:
+      scenarios-json:
+        description: JSON array of setup scenario names
+        type: string
+        default: '["plugin","mcp","npm-package","cli"]'
+      setup-npm-script:
+        description: npm script that runs the setup CLI
+        type: string
+        default: setup
+      smoke-name-prefix:
+        description: Prefix for --name (scenario and -template are appended)
+        type: string
+        default: "@smoke/"
+      node-version-file:
+        description: Node version file in the caller repository
+        type: string
+        default: .nvmrc
+      timeout-minutes:
+        description: Per-matrix job timeout
+        type: number
+        default: 15
+
+jobs:
+  setup-smoke:
+    name: Setup smoke (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJson(inputs.scenarios-json) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Run setup scenario
+        env:
+          SETUP_NPM_SCRIPT: ${{ inputs.setup-npm-script }}
+          SMOKE_NAME_PREFIX: ${{ inputs.smoke-name-prefix }}
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          set -euo pipefail
+          npm run "$SETUP_NPM_SCRIPT" -- --scenario "$SCENARIO" --name "${SMOKE_NAME_PREFIX}${SCENARIO}-template" --yes
