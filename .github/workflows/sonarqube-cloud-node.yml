@@ -11,10 +11,10 @@ on:
         description: Node version file in the caller repository
         type: string
         default: .nvmrc
-      coverage-command:
-        description: npm script that produces coverage for Sonar
+      coverage-npm-script:
+        description: npm script that produces coverage for Sonar (runs npm run)
         type: string
-        default: npm run test:coverage
+        default: test:coverage
       timeout-minutes:
         description: Job timeout
         type: number
@@ -40,7 +40,9 @@ jobs:
       - if: env.SONAR_TOKEN != ''
         run: npm ci --ignore-scripts
       - if: env.SONAR_TOKEN != ''
-        run: ${{ inputs.coverage-command }}
+        env:
+          NPM_SCRIPT: ${{ inputs.coverage-npm-script }}
+        run: npm run "$NPM_SCRIPT"
       - if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:

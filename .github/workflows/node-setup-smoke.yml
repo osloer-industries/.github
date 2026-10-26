@@ -7,10 +7,14 @@ on:
         description: JSON array of setup scenario names
         type: string
         default: '["plugin","mcp","npm-package","cli"]'
-      setup-command:
-        description: Setup CLI invocation (scenario substituted as {scenario})
+      setup-npm-script:
+        description: npm script that runs the setup CLI
         type: string
-        default: npm run setup -- --scenario {scenario} --name @smoke/{scenario}-template --yes
+        default: setup
+      smoke-name-prefix:
+        description: Prefix for --name (scenario and -template are appended)
+        type: string
+        default: "@smoke/"
       node-version-file:
         description: Node version file in the caller repository
         type: string
@@ -40,9 +44,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Run setup scenario
         env:
-          SETUP_COMMAND: ${{ inputs.setup-command }}
+          SETUP_NPM_SCRIPT: ${{ inputs.setup-npm-script }}
+          SMOKE_NAME_PREFIX: ${{ inputs.smoke-name-prefix }}
           SCENARIO: ${{ matrix.scenario }}
         run: |
           set -euo pipefail
-          cmd="${SETUP_COMMAND//\{scenario\}/${SCENARIO}}"
-          eval "$cmd"
+          npm run "$SETUP_NPM_SCRIPT" -- --scenario "$SCENARIO" --name "${SMOKE_NAME_PREFIX}${SCENARIO}-template" --yes

@@ -7,10 +7,10 @@ on:
         description: Node version file in the caller repository
         type: string
         default: .nvmrc
-      check-command:
-        description: Project check command (lint, typecheck, coverage, build)
+      check-npm-script:
+        description: npm script for lint, typecheck, coverage, build (runs npm run)
         type: string
-        default: npm run check
+        default: check
       npm-ci-ignore-scripts:
         description: Pass --ignore-scripts to npm ci
         type: boolean
@@ -72,4 +72,6 @@ jobs:
             npm audit --omit=dev --audit-level="$AUDIT_LEVEL" --prefix "$prefix"
           done
       - name: Run check
-        run: ${{ inputs.check-command }}
+        env:
+          NPM_SCRIPT: ${{ inputs.check-npm-script }}
+        run: npm run "$NPM_SCRIPT"

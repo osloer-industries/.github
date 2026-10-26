@@ -20,6 +20,17 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
 
+### Reusable workflow inputs (Node)
+
+| Workflow | Input | Default | Purpose |
+| --- | --- | --- | --- |
+| `node-npm-quality.yml` | `check-npm-script` | `check` | npm script passed to `npm run` for the quality gate |
+| `sonarqube-cloud-node.yml` | `coverage-npm-script` | `test:coverage` | npm script that generates coverage before Sonar upload |
+| `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
+| `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
+
+Callers that previously passed full shell commands should switch to npm script names only (for example `check-npm-script: check` instead of `check-command: npm run check`).
+
 ## Caller examples
 
 ### Semantic pull request title
@@ -156,6 +167,7 @@ jobs:
   quality:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA
     with:
+      check-npm-script: check
       npm-prefixes-json: '["packages/eslint-sonarjs"]'
 ```
 
