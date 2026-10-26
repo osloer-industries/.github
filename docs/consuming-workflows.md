@@ -30,7 +30,7 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
 | `codeql-javascript-typescript.yml` | `fail-on-sarif-level` | `error` | With `code-scanning-upload: false`, fail on security-tagged SARIF at this level or above |
-| `codeql-javascript-typescript.yml` | `analysis-paths` | *(empty)* | Optional newline-separated path prefixes passed to CodeQL init (`paths`); empty analyzes the full repo |
+| `codeql-javascript-typescript.yml` | `source-root` | *(empty)* | Optional directory passed to CodeQL init as `source-root`; empty analyzes from the repository root |
 
 Callers that previously passed full shell commands should switch to npm script names only (for example `check-npm-script: check` instead of `check-command: npm run check`).
 
@@ -107,7 +107,7 @@ Download the `codeql-sarif-*` workflow artifact for the full SARIF when triaging
 
 The security gate runs from the same reusables commit as the workflow pin (via the `./.github/actions/codeql-sarif-security-gate` action bundled in this repository). It resolves CodeQL rules from the SARIF driver and query-pack extensions, honors `result.rule` index references, and falls back to each rule’s `defaultConfiguration.level` when a result omits `level`. Missing SARIF files or unparseable SARIF fails the job.
 
-This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures, runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and calls this reusable workflow in artifact mode on `test-fixtures/codeql-smoke`.
+This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures, runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and calls this reusable workflow in artifact mode with `source-root: test-fixtures/codeql-smoke`.
 
 ### Dependency review
 

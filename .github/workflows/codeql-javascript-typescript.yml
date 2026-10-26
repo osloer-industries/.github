@@ -24,10 +24,10 @@ on:
           code-scanning-upload is false. One of error, warning, or note.
         type: string
         default: error
-      analysis-paths:
+      source-root:
         description: >-
-          Optional path filter forwarded to CodeQL init (newline-separated prefixes). Leave empty
-          to analyze the full repository.
+          Optional path passed to CodeQL init as source-root (limits analysis to that directory).
+          Leave empty to analyze from the repository root.
         type: string
         default: ""
 
@@ -44,7 +44,7 @@ jobs:
         with:
           languages: javascript-typescript
           queries: ${{ inputs.queries }}
-          paths: ${{ inputs.analysis-paths }}
+          source-root: ${{ inputs.source-root }}
       - name: Finish CodeQL (Code Scanning upload)
         if: inputs.code-scanning-upload
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1

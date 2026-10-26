@@ -39,7 +39,7 @@ jobs:
         with:
           languages: javascript-typescript
           queries: security-extended
-          paths: test-fixtures/codeql-vulnerable
+          source-root: test-fixtures/codeql-vulnerable
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           upload: never
@@ -62,4 +62,4 @@ jobs:
     with:
       code-scanning-upload: false
       fail-on-sarif-level: error
-      analysis-paths: test-fixtures/codeql-smoke
+      source-root: test-fixtures/codeql-smoke
