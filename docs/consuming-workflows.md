@@ -19,6 +19,7 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
+| `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 
 ### Reusable workflow inputs (Node)
 
@@ -177,6 +178,37 @@ jobs:
 jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA
+```
+
+### Workflow security (actionlint + zizmor)
+
+Runs [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` and [zizmor](https://docs.zizmor.sh/) on the **repository root** (default `inputs: .`), so Dependabot config (`.github/dependabot.yml`), composite `action.yml` files, and workflows are audited. Uses `zizmor-action` with `advanced-security: false` so findings fail the job (no SARIF upload). Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+
+**Bumping actionlint** (not managed by Dependabot): in `workflow-security.yml`, update both `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` on the install step together. Download the matching `actionlint_<version>_linux_amd64.tar.gz` line from the release [`actionlint_<version>_checksums.txt`](https://github.com/rhysd/actionlint/releases) (GitHub release asset digest or the file contents) and paste the `linux_amd64` SHA-256 into `ACTIONLINT_SHA256`.
+
+This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.12** does not yet accept GitHub’s `$/` self-repository `uses:` form, while zizmor flags `./` for local reusables).
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA
+    permissions:
+      contents: read
+      actions: read
 ```
 
 ## What stays in each repository
