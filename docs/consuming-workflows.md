@@ -19,6 +19,7 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
+| `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 
 ### Reusable workflow inputs (Node)
 
@@ -177,6 +178,33 @@ jobs:
 jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA
+```
+
+### Workflow security (actionlint + zizmor)
+
+Scans caller `.github/workflows` with [actionlint](https://github.com/rhysd/actionlint) (release binary, checksum-verified) and [zizmor](https://docs.zizmor.sh/) via `zizmor-action` with `advanced-security: false` so findings fail the job (no SARIF upload). Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA
+    permissions:
+      contents: read
+      actions: read
 ```
 
 ## What stays in each repository
