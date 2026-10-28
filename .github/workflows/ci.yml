@@ -1,3 +1,4 @@
+# Workflow security (actionlint + zizmor) runs via workflow-security.yml on the same events.
 name: CI
 
 on:
@@ -13,12 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  workflow-security:
-    uses: $/.github/workflows/workflow-security.yml
-    permissions:
-      contents: read
-      actions: read
-
   zizmor-fail-closed-self-test:
     name: zizmor fail-closed self-test
     runs-on: ubuntu-latest

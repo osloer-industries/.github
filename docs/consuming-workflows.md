@@ -184,6 +184,8 @@ jobs:
 
 Scans caller `.github/workflows` with [actionlint](https://github.com/rhysd/actionlint) (release binary, checksum-verified) and [zizmor](https://docs.zizmor.sh/) via `zizmor-action` with `advanced-security: false` so findings fail the job (no SARIF upload). Requires `contents: read` and `actions: read` on the job (private repos and online audits).
 
+This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.12** does not yet accept GitHub’s `$/` self-repository `uses:` form, while zizmor flags `./` for local reusables).
+
 ```yaml
 name: CI
 
