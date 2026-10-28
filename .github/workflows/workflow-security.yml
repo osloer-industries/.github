@@ -47,4 +47,3 @@ jobs:
           advanced-security: false
           annotations: true
           online-audits: true
-          inputs: .github/workflows

@@ -182,7 +182,9 @@ jobs:
 
 ### Workflow security (actionlint + zizmor)
 
-Scans caller `.github/workflows` with [actionlint](https://github.com/rhysd/actionlint) (release binary, checksum-verified) and [zizmor](https://docs.zizmor.sh/) via `zizmor-action` with `advanced-security: false` so findings fail the job (no SARIF upload). Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+Runs [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` and [zizmor](https://docs.zizmor.sh/) on the **repository root** (default `inputs: .`), so Dependabot config (`.github/dependabot.yml`), composite `action.yml` files, and workflows are audited. Uses `zizmor-action` with `advanced-security: false` so findings fail the job (no SARIF upload). Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+
+**Bumping actionlint** (not managed by Dependabot): in `workflow-security.yml`, update both `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` on the install step together. Download the matching `actionlint_<version>_linux_amd64.tar.gz` line from the release [`actionlint_<version>_checksums.txt`](https://github.com/rhysd/actionlint/releases) (GitHub release asset digest or the file contents) and paste the `linux_amd64` SHA-256 into `ACTIONLINT_SHA256`.
 
 This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.12** does not yet accept GitHub’s `$/` self-repository `uses:` form, while zizmor flags `./` for local reusables).
 

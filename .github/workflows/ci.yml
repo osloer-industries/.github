@@ -25,11 +25,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Resolve and verify zizmor-action pin
+        id: zizmor-pin
+        run: node --experimental-strip-types .github/scripts/assert-zizmor-action-pin.ts
       - name: Checkout pinned zizmor-action (for action.sh)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: zizmorcore/zizmor-action
-          ref: 53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+          ref: ${{ steps.zizmor-pin.outputs.zizmor-action-ref }}
           path: .ci/zizmor-action
           persist-credentials: false
       - name: Assert zizmor-action fails on must-fail fixture
