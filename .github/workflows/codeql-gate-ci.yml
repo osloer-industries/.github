@@ -21,13 +21,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          python-version: "3.12"
+          node-version: "24"
       - name: Verify inline gate matches canonical script
-        run: python3 .github/scripts/codeql_gate_inline.py --check
+        run: node .github/scripts/codeql-gate-inline.ts --check
       - name: Run gate fixture tests
-        run: python3 .github/scripts/test_codeql_sarif_security_gate.py
+        run: node --test .github/scripts/test-codeql-sarif-security-gate.test.ts
 
   codeql-live-vulnerable-gate:
     name: Live CodeQL fixture (gate must fail)
@@ -46,12 +46,15 @@ jobs:
           upload: never
           wait-for-processing: false
           post-processed-sarif-path: codeql-sarif
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
       - name: Expect gate to fail on live security SARIF
         env:
           FAIL_ON_SARIF_LEVEL: error
           SARIF_DIR: codeql-sarif
         run: |
-          if python3 .github/scripts/run_shipped_codeql_gate.py; then
+          if node .github/scripts/run-shipped-codeql-gate.ts; then
             echo "Expected security gate to fail on live CodeQL SARIF"
             exit 1
           fi
@@ -80,8 +83,11 @@ jobs:
           name: codeql-sarif-smoke-${{ github.run_id }}
           path: codeql-sarif/
           if-no-files-found: error
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
       - name: Enforce security findings threshold (shipped inline gate)
         env:
           FAIL_ON_SARIF_LEVEL: error
           SARIF_DIR: codeql-sarif
-        run: python3 .github/scripts/run_shipped_codeql_gate.py
+        run: node .github/scripts/run-shipped-codeql-gate.ts
