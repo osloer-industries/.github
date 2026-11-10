@@ -227,7 +227,9 @@ jobs:
 
 ### Workflow security (actionlint + zizmor)
 
-Runs [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` and [zizmor](https://docs.zizmor.sh/) on the **repository root** (default `inputs: .`), so Dependabot config (`.github/dependabot.yml`), composite `action.yml` files, and workflows are audited. Uses SHA-pinned `zizmor-action` with an explicit `version:` input (hash-verified CLI wheel — not `latest`) and `advanced-security: false` so findings fail the job (no SARIF upload). Org defaults leave `min-severity` and `min-confidence` empty so zizmor omits filter flags and reports every finding; invalid threshold inputs fail before zizmor runs. Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+Runs [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` and [zizmor](https://docs.zizmor.sh/) on the **repository root** (default `inputs: .`), so Dependabot config (`.github/dependabot.yml`), composite `action.yml` files, and workflows are audited. Uses SHA-pinned `zizmor-action` with an explicit `version:` input (hash-verified CLI wheel — not `latest`) and `advanced-security: false` so findings fail the job (no SARIF upload). Org defaults leave `min-severity` and `min-confidence` empty so zizmor omits filter flags and reports every finding; invalid threshold inputs fail before zizmor runs. Threshold validation is **inlined in the reusable workflow** (embedded TypeScript heredoc + Node 24), so cross-repo callers always run the script from the pinned reusables commit—no runtime checkout of `osloer-industries/.github`. The editable source is `.github/scripts/validate-zizmor-thresholds.ts`; CI keeps it byte-identical to the inline copy (`node .github/scripts/zizmor-thresholds-inline.ts --check`).
+
+Requires `contents: read` and `actions: read` on the called job (private repos and online audits). For a **standalone caller workflow** (not nested under another reusable), also set workflow-level `actions: read`; without it GitHub can fail the run at startup with zero jobs executed.
 
 **Bumping actionlint** (not managed by Dependabot): in `workflow-security.yml`, update both `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` on the install step together. Download the matching `actionlint_<version>_linux_amd64.tar.gz` line from the release [`actionlint_<version>_checksums.txt`](https://github.com/rhysd/actionlint/releases) (GitHub release asset digest or the file contents) and paste the `linux_amd64` SHA-256 into `ACTIONLINT_SHA256`.
 
@@ -245,6 +247,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

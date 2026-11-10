@@ -40,24 +40,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Resolve reusable workflow source (validator script)
-        id: reusable
-        env:
-          WF_REF: ${{ github.workflow_ref }}
-        run: |
-          set -euo pipefail
-          repo="${WF_REF%/.github/workflows/*}"
-          ref="${WF_REF##*@}"
-          echo "repository=${repo}" >> "$GITHUB_OUTPUT"
-          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ steps.reusable.outputs.repository }}
-          ref: ${{ steps.reusable.outputs.ref }}
-          path: .workflow-security-support
-          persist-credentials: false
-          sparse-checkout: |
-            .github/scripts/validate-zizmor-thresholds.ts
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -65,9 +47,75 @@ jobs:
         env:
           ZIZMOR_MIN_SEVERITY: ${{ inputs.min-severity }}
           ZIZMOR_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
-        run: node --experimental-strip-types .workflow-security-support/.github/scripts/validate-zizmor-thresholds.ts
-      - name: Remove reusable workflow support checkout
-        run: rm -rf .workflow-security-support
+        run: |
+          set -euo pipefail
+          VALIDATE_TS="$(mktemp --suffix=.mts)"
+          trap 'rm -f "$VALIDATE_TS"' EXIT
+          cat <<'ZIZMOR_THRESHOLDS_INLINE' >"$VALIDATE_TS"
+          /**
+           * Fail-closed validation for zizmor-action min-severity / min-confidence.
+           * Allowed values match zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b action.yml.
+           * Empty string means omit the flag (report all findings — strictest fail-closed default).
+           */
+          
+          /** @see https://github.com/zizmorcore/zizmor-action action.yml inputs.min-severity */
+          export const MIN_SEVERITY_ALLOWED = [
+            "",
+            "unknown",
+            "informational",
+            "low",
+            "medium",
+            "high",
+          ] as const;
+          
+          /** @see https://github.com/zizmorcore/zizmor-action action.yml inputs.min-confidence */
+          export const MIN_CONFIDENCE_ALLOWED = [
+            "",
+            "unknown",
+            "low",
+            "medium",
+            "high",
+          ] as const;
+          
+          function usageList(values: readonly string[]): string {
+            const shown = values.filter((v) => v.length > 0);
+            return `omit or empty (strictest), ${shown.join(", ")}`;
+          }
+          
+          export function validateZizmorThresholds(
+            minSeverity: string,
+            minConfidence: string,
+          ): void {
+            if (!MIN_SEVERITY_ALLOWED.includes(minSeverity as (typeof MIN_SEVERITY_ALLOWED)[number])) {
+              console.error(
+                `::error::Invalid min-severity ${JSON.stringify(minSeverity)}. Allowed: ${usageList(MIN_SEVERITY_ALLOWED)}`,
+              );
+              process.exit(1);
+            }
+            if (
+              !MIN_CONFIDENCE_ALLOWED.includes(
+                minConfidence as (typeof MIN_CONFIDENCE_ALLOWED)[number],
+              )
+            ) {
+              console.error(
+                `::error::Invalid min-confidence ${JSON.stringify(minConfidence)}. Allowed: ${usageList(MIN_CONFIDENCE_ALLOWED)}`,
+              );
+              process.exit(1);
+            }
+            if (minSeverity === "unknown" || minConfidence === "unknown") {
+              console.warn(
+                "::warning::min-severity/min-confidence 'unknown' is deprecated in zizmor; prefer empty default for full reporting.",
+              );
+            }
+          }
+          
+          const minSeverity = process.env.ZIZMOR_MIN_SEVERITY ?? "";
+          const minConfidence = process.env.ZIZMOR_MIN_CONFIDENCE ?? "";
+          
+          validateZizmorThresholds(minSeverity, minConfidence);
+          console.log("zizmor threshold inputs OK");
+          ZIZMOR_THRESHOLDS_INLINE
+          node --experimental-strip-types "$VALIDATE_TS"
       - name: Install actionlint
         env:
           ACTIONLINT_VERSION: 1.7.12
