@@ -33,6 +33,9 @@ jobs:
     name: Live CodeQL fixture (gate must fail)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # PR runs otherwise restrict results to the diff; this job must always audit the fixture.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
