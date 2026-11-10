@@ -19,6 +19,16 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
+| `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
+
+### Reusable workflow inputs (workflow security)
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `min-severity` | `""` (empty) | zizmor minimum severity to **report**. Empty omits `--min-severity` so all severities are reported (strictest org default). Set `medium` or `high` to hide lower-severity findings and relax the gate. |
+| `min-confidence` | `""` (empty) | zizmor minimum confidence to **report**. Empty omits `--min-confidence` so all confidence levels are reported (strictest org default). Set `medium` or `high` to hide lower-confidence findings and relax the gate. |
+
+Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium`, `high` for severity; `low`, `medium`, `high` for confidence; `unknown` is accepted but deprecated by zizmor — use empty instead). Invalid values fail the job before zizmor runs.
 
 ### Reusable workflow inputs (Node)
 
@@ -213,6 +223,47 @@ jobs:
 jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA
+```
+
+### Workflow security (actionlint + zizmor)
+
+Runs [actionlint](https://github.com/rhysd/actionlint) on `.github/workflows` and [zizmor](https://docs.zizmor.sh/) on the **repository root** (default `inputs: .`), so Dependabot config (`.github/dependabot.yml`), composite `action.yml` files, and workflows are audited. Uses SHA-pinned `zizmor-action` with an explicit `version:` input (hash-verified CLI wheel — not `latest`) and `advanced-security: false` so findings fail the job (no SARIF upload). Org defaults leave `min-severity` and `min-confidence` empty so zizmor omits filter flags and reports every finding; invalid threshold inputs fail before zizmor runs. Requires `contents: read` and `actions: read` on the job (private repos and online audits).
+
+**Bumping actionlint** (not managed by Dependabot): in `workflow-security.yml`, update both `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` on the install step together. Download the matching `actionlint_<version>_linux_amd64.tar.gz` line from the release [`actionlint_<version>_checksums.txt`](https://github.com/rhysd/actionlint/releases) (GitHub release asset digest or the file contents) and paste the `linux_amd64` SHA-256 into `ACTIONLINT_SHA256`.
+
+**Bumping zizmor CLI** (not managed by Dependabot): Dependabot’s `github-actions` updates can bump the `zizmorcore/zizmor-action@…` SHA only. After any action SHA bump, set the `version:` input on the Run zizmor step to an **exact** release that exists under `support/locks/zizmor-<version>.txt` in that action ref ([releases](https://github.com/zizmorcore/zizmor/releases)). Do not use `latest` or leave `version` unset — CI fails closed via `.github/scripts/assert-zizmor-action-pin.ts`.
+
+This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.12** does not yet accept GitHub’s `$/` self-repository `uses:` form, while zizmor flags `./` for local reusables).
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA
+    permissions:
+      contents: read
+      actions: read
+```
+
+Optional relax (fewer reported findings; only when you accept a weaker gate):
+
+```yaml
+    with:
+      min-severity: medium
+      min-confidence: medium
 ```
 
 ## What stays in each repository

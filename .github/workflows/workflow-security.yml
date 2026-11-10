@@ -1,0 +1,95 @@
+name: Reusable — workflow security
+
+on:
+  workflow_call:
+    inputs:
+      min-severity:
+        description: |
+          Minimum finding severity zizmor reports (empty = omit flag, report all — org default).
+          informational, low, medium, high filter out lower severities (raising relaxes the gate).
+          unknown is accepted but deprecated by zizmor; prefer empty.
+        type: string
+        default: ""
+      min-confidence:
+        description: |
+          Minimum finding confidence zizmor reports (empty = omit flag, report all — org default).
+          low, medium, high filter out lower confidence (raising relaxes the gate).
+          unknown is accepted but deprecated by zizmor; prefer empty.
+        type: string
+        default: ""
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-security:
+    name: Workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Resolve reusable workflow source (validator script)
+        id: reusable
+        env:
+          WF_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          repo="${WF_REF%/.github/workflows/*}"
+          ref="${WF_REF##*@}"
+          echo "repository=${repo}" >> "$GITHUB_OUTPUT"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.reusable.outputs.repository }}
+          ref: ${{ steps.reusable.outputs.ref }}
+          path: .workflow-security-support
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/validate-zizmor-thresholds.ts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Validate zizmor min severity and confidence
+        env:
+          ZIZMOR_MIN_SEVERITY: ${{ inputs.min-severity }}
+          ZIZMOR_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
+        run: node --experimental-strip-types .workflow-security-support/.github/scripts/validate-zizmor-thresholds.ts
+      - name: Remove reusable workflow support checkout
+        run: rm -rf .workflow-security-support
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          curl -fsSL "$url" -o "$tarball"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum -c -
+          tar xzf "$tarball"
+          mkdir -p "${HOME}/.local/bin"
+          install -m 0755 actionlint "${HOME}/.local/bin/actionlint"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+      - name: Run actionlint
+        run: actionlint -color
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: "1.31.1"
+          advanced-security: false
+          annotations: true
+          online-audits: true
+          min-severity: ${{ inputs.min-severity }}
+          min-confidence: ${{ inputs.min-confidence }}
