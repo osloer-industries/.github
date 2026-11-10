@@ -10,15 +10,18 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | --- | --- |
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
-
-### CodeQL SARIF security gate (artifact mode)
-
-When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs an inlined TypeScript gate (Node 24, no npm install in callers). Source of truth: [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts). Keep the inline copy in the workflow synchronized with `node .github/scripts/codeql-gate-inline.ts --write` / `--check`. Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml).
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
+| [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
+
+### CodeQL SARIF security gate (artifact mode)
+
+When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs an inlined TypeScript gate (Node 24, no npm install in callers). Source of truth: [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts). Keep the inline copy in the workflow synchronized with `node .github/scripts/codeql-gate-inline.ts --write` / `--check`. Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml). This repository’s [`ci.yml`](.github/workflows/ci.yml) also runs `codeql-gate-inline.ts --check` on every PR/push so drift is caught outside the CodeQL gate workflow.
+
+Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (default empty — report all findings). Invalid values fail closed. See [docs/consuming-workflows.md](docs/consuming-workflows.md).
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
 

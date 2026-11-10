@@ -1,0 +1,10 @@
+# CI fixture: must trigger zizmor unpinned-uses (fail-closed self-test only).
+name: Zizmor must-fail fixture
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
