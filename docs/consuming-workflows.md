@@ -108,10 +108,15 @@ concurrency:
 jobs:
   analyze:
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA
+    permissions:
+      contents: read
+      actions: read
     with:
       code-scanning-upload: false
       fail-on-sarif-level: error
 ```
+
+Cross-repo `workflow_call` on private repositories needs job-level `permissions` (`contents: read`, `actions: read`) on the job that invokes the reusable; without `actions: read`, `github/codeql-action` fails with *Resource not accessible by integration*.
 
 Download the `codeql-sarif-*` workflow artifact for the full SARIF when triaging findings.
 
