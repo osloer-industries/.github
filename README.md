@@ -13,6 +13,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
+| [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
@@ -22,6 +23,10 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs an inlined TypeScript gate (Node 24, no npm install in callers). Source of truth: [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts). Keep the inline copy in the workflow synchronized with `node .github/scripts/codeql-gate-inline.ts --write` / `--check`. Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml). This repository’s [`ci.yml`](.github/workflows/ci.yml) also runs `codeql-gate-inline.ts --check` on every PR/push so drift is caught outside the CodeQL gate workflow.
 
 Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (default empty — report all findings). Invalid values fail closed. See [docs/consuming-workflows.md](docs/consuming-workflows.md).
+
+### SonarCloud zero open issues
+
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Canonical script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts) (inlined in the reusable workflow for cross-repo callers). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
 
