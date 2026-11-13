@@ -26,7 +26,7 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 
 ### SonarCloud zero open issues
 
-SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Canonical script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts) (inlined in the reusable workflow for cross-repo callers). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out `osloer-industries/.github` at the same commit SHA the caller pinned (`github.workflow_sha`), or at `reusables-ref` when set. Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
 

@@ -48,8 +48,8 @@ jobs:
       - name: Verify inline zizmor threshold validator matches canonical script
         run: node .github/scripts/zizmor-thresholds-inline.ts --check
 
-  sonarcloud-zero-issues-gate-sync:
-    name: SonarCloud zero issues inline sync
+  sonarcloud-zero-issues-unit:
+    name: SonarCloud zero issues unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -61,8 +61,6 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      - name: Verify inline SonarCloud gate matches canonical script
-        run: node .github/scripts/sonarcloud-zero-issues-inline.ts --check
       - name: Run SonarCloud zero issues unit tests
         run: node --test .github/scripts/test-sonarcloud-zero-issues.test.ts
 

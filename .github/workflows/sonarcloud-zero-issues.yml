@@ -19,6 +19,10 @@ on:
         description: Seconds between SonarCloud API polls while waiting for analysis
         type: number
         default: 10
+      reusables-ref:
+        description: Commit SHA of osloer-industries/.github that supplies the gate script (empty = caller-pinned workflow SHA from github.workflow_sha)
+        type: string
+        default: ""
     secrets:
       SONAR_TOKEN:
         description: SonarCloud user token with permission to read issues for the project
@@ -29,7 +33,34 @@ jobs:
     name: SonarCloud zero open issues
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
     steps:
+      - name: Resolve reusables commit for gate script
+        id: reusables
+        env:
+          INPUT_REF: ${{ inputs.reusables-ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          ref="${INPUT_REF}"
+          if [ -z "$ref" ]; then
+            ref="${WORKFLOW_SHA}"
+          fi
+          if [ -z "$ref" ]; then
+            echo "::error::Could not resolve osloer-industries/.github ref. Pin uses: to a commit SHA (sets github.workflow_sha) or pass reusables-ref."
+            exit 1
+          fi
+          echo "ref=$ref" >>"$GITHUB_OUTPUT"
+          echo "Using osloer-industries/.github@${ref} for sonarcloud-zero-issues.ts"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ steps.reusables.outputs.ref }}
+          path: reusables
+          sparse-checkout: .github/scripts/sonarcloud-zero-issues.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -50,415 +81,4 @@ jobs:
             echo "::error::SONAR_TOKEN secret is required for SonarCloud zero open issues. Configure a repository or organization Actions secret; the job must fail when it is missing."
             exit 1
           fi
-          SONAR_GATE_TS="$(mktemp --suffix=.mts)"
-          trap 'rm -f "$SONAR_GATE_TS"' EXIT
-          cat <<'SONARCLOUD_ZERO_ISSUES_INLINE' >"$SONAR_GATE_TS"
-          /**
-           * Wait for SonarCloud pull request analysis on the head commit, then fail when
-           * OPEN or CONFIRMED issues remain (Sonar "Sonar way" quality gate ignores counts).
-           */
-          
-          import { fileURLToPath } from "node:url";
-          
-          export const DEFAULT_SONAR_HOST = "https://sonarcloud.io";
-          
-          export type FetchLike = typeof fetch;
-          
-          export interface SonarConfig {
-            token: string;
-            host: string;
-            projectKey: string;
-            pullRequestNumber: number;
-            headSha: string;
-            pollIntervalMs: number;
-            deadlineMs: number;
-            startedAtMs: number;
-            organization: string;
-          }
-          
-          export interface PullRequestAnalysis {
-            key: string;
-            analysisDate?: string;
-            commit?: { sha?: string };
-            status?: { qualityGateStatus?: string };
-            branch?: string;
-            base?: string;
-          }
-          
-          export interface SonarIssue {
-            rule: string;
-            severity: string;
-            component: string;
-            line?: number;
-            message: string;
-          }
-          
-          interface IssuesSearchPage {
-            total: number;
-            issues: SonarIssue[];
-          }
-          
-          interface CeActivityTask {
-            status: string;
-            type?: string;
-            branch?: string;
-            pullRequest?: string;
-            componentKey?: string;
-            errorMessage?: string;
-          }
-          
-          function basicAuthHeader(token: string): string {
-            return `Basic ${Buffer.from(`${token}:`, "utf8").toString("base64")}`;
-          }
-          
-          export function resolveProjectKey(
-            explicit: string | undefined,
-            organization: string,
-            repositoryName: string,
-          ): string {
-            const trimmed = explicit?.trim() ?? "";
-            if (trimmed.length > 0) {
-              return trimmed;
-            }
-            return `${organization}_${repositoryName}`;
-          }
-          
-          export function parseConfigFromEnv(
-            env: NodeJS.ProcessEnv,
-            nowMs: number = Date.now(),
-          ): SonarConfig {
-            const token = (env.SONAR_TOKEN ?? "").trim();
-            if (token.length === 0) {
-              console.error(
-                "::error::SONAR_TOKEN is required. Add an org or repository Actions secret with a SonarCloud token that can read issues for this project.",
-              );
-              process.exit(1);
-            }
-          
-            const eventName = (env.GITHUB_EVENT_NAME ?? "").trim();
-            if (eventName !== "pull_request") {
-              console.error(
-                `::error::SonarCloud zero open issues runs only on pull_request events (got ${JSON.stringify(eventName)}).`,
-              );
-              process.exit(1);
-            }
-          
-            const pullRequestNumber = Number(env.PULL_REQUEST_NUMBER ?? "");
-            if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
-              console.error(
-                "::error::PULL_REQUEST_NUMBER must be a positive integer (set from github.event.pull_request.number).",
-              );
-              process.exit(1);
-            }
-          
-            const headSha = (env.HEAD_SHA ?? "").trim().toLowerCase();
-            if (!/^[0-9a-f]{40}$/.test(headSha)) {
-              console.error(
-                "::error::HEAD_SHA must be the 40-character pull request head commit (github.event.pull_request.head.sha).",
-              );
-              process.exit(1);
-            }
-          
-            const organization = (env.SONAR_ORGANIZATION ?? "osloer-industries").trim();
-            const repositoryName = (env.GITHUB_REPOSITORY_NAME ?? "").trim();
-            if (repositoryName.length === 0) {
-              console.error(
-                "::error::GITHUB_REPOSITORY_NAME is required (github.event.repository.name from the caller).",
-              );
-              process.exit(1);
-            }
-          
-            const timeoutMinutes = Number(env.SONAR_WAIT_TIMEOUT_MINUTES ?? "20");
-            if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) {
-              console.error("::error::SONAR_WAIT_TIMEOUT_MINUTES must be a positive number.");
-              process.exit(1);
-            }
-          
-            const pollIntervalSeconds = Number(env.SONAR_POLL_INTERVAL_SECONDS ?? "10");
-            if (!Number.isFinite(pollIntervalSeconds) || pollIntervalSeconds <= 0) {
-              console.error("::error::SONAR_POLL_INTERVAL_SECONDS must be a positive number.");
-              process.exit(1);
-            }
-          
-            return {
-              token,
-              host: (env.SONAR_HOST ?? DEFAULT_SONAR_HOST).replace(/\/$/, ""),
-              projectKey: resolveProjectKey(
-                env.SONAR_PROJECT_KEY,
-                organization,
-                repositoryName,
-              ),
-              pullRequestNumber,
-              headSha,
-              pollIntervalMs: Math.round(pollIntervalSeconds * 1000),
-              startedAtMs: nowMs,
-              deadlineMs: nowMs + Math.round(timeoutMinutes * 60 * 1000),
-              organization,
-            };
-          }
-          
-          async function sonarGetJson<T>(
-            host: string,
-            token: string,
-            path: string,
-            fetchImpl: FetchLike,
-          ): Promise<T> {
-            const url = `${host}${path}`;
-            const response = await fetchImpl(url, {
-              headers: {
-                Accept: "application/json",
-                Authorization: basicAuthHeader(token),
-              },
-            });
-            const text = await response.text();
-            if (!response.ok) {
-              throw new Error(
-                `SonarCloud API ${path} returned HTTP ${response.status}: ${text.slice(0, 500)}`,
-              );
-            }
-            try {
-              return JSON.parse(text) as T;
-            } catch {
-              throw new Error(`SonarCloud API ${path} returned invalid JSON`);
-            }
-          }
-          
-          export async function listProjectPullRequests(
-            config: Pick<SonarConfig, "host" | "token" | "projectKey">,
-            fetchImpl: FetchLike,
-          ): Promise<PullRequestAnalysis[]> {
-            const path = `/api/project_pull_requests/list?project=${encodeURIComponent(config.projectKey)}`;
-            const data = await sonarGetJson<{ pullRequests?: PullRequestAnalysis[] }>(
-              config.host,
-              config.token,
-              path,
-              fetchImpl,
-            );
-            return Array.isArray(data.pullRequests) ? data.pullRequests : [];
-          }
-          
-          export async function fetchCeActivity(
-            config: Pick<SonarConfig, "host" | "token" | "projectKey">,
-            fetchImpl: FetchLike,
-          ): Promise<CeActivityTask[]> {
-            const path =
-              `/api/ce/activity?component=${encodeURIComponent(config.projectKey)}` +
-              "&type=REPORT&ps=20";
-            const data = await sonarGetJson<{ tasks?: CeActivityTask[] }>(
-              config.host,
-              config.token,
-              path,
-              fetchImpl,
-            );
-            return Array.isArray(data.tasks) ? data.tasks : [];
-          }
-          
-          export function findPullRequestForKey(
-            pullRequests: PullRequestAnalysis[],
-            pullRequestNumber: number,
-          ): PullRequestAnalysis | undefined {
-            const key = String(pullRequestNumber);
-            return pullRequests.find((entry) => entry.key === key);
-          }
-          
-          export function analysisMatchesHead(
-            pullRequest: PullRequestAnalysis,
-            headSha: string,
-          ): boolean {
-            const sha = pullRequest.commit?.sha?.trim().toLowerCase() ?? "";
-            return sha.length > 0 && sha === headSha.toLowerCase();
-          }
-          
-          export function latestFailedCeForPullRequest(
-            tasks: CeActivityTask[],
-            pullRequestNumber: number,
-          ): CeActivityTask | undefined {
-            const key = String(pullRequestNumber);
-            for (const task of tasks) {
-              if (task.pullRequest !== key) {
-                continue;
-              }
-              const status = (task.status ?? "").toUpperCase();
-              if (status === "FAILED" || status === "CANCELED") {
-                return task;
-              }
-            }
-            return undefined;
-          }
-          
-          export interface WaitOptions {
-            sleep?: (ms: number) => Promise<void>;
-            now?: () => number;
-          }
-          
-          export async function waitForPullRequestAnalysis(
-            config: SonarConfig,
-            fetchImpl: FetchLike,
-            options: WaitOptions = {},
-          ): Promise<PullRequestAnalysis> {
-            const sleepFn =
-              options.sleep ??
-              ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-            const nowFn = options.now ?? (() => Date.now());
-          
-            while (nowFn() < config.deadlineMs) {
-              const pullRequests = await listProjectPullRequests(config, fetchImpl);
-              const entry = findPullRequestForKey(
-                pullRequests,
-                config.pullRequestNumber,
-              );
-          
-              if (entry && analysisMatchesHead(entry, config.headSha)) {
-                console.log(
-                  `SonarCloud PR #${config.pullRequestNumber} analysis is ready for commit ${config.headSha} (analysisDate=${entry.analysisDate ?? "unknown"}).`,
-                );
-                return entry;
-              }
-          
-              const ceTasks = await fetchCeActivity(config, fetchImpl);
-              const failed = latestFailedCeForPullRequest(
-                ceTasks,
-                config.pullRequestNumber,
-              );
-              if (failed) {
-                const detail = failed.errorMessage?.trim() || "no error message";
-                throw new Error(
-                  `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
-                );
-              }
-          
-              if (entry) {
-                const seenSha = entry.commit?.sha ?? "(none)";
-                console.log(
-                  `Waiting for SonarCloud to finish analysing head ${config.headSha}; latest PR analysis commit is ${seenSha}.`,
-                );
-              } else {
-                console.log(
-                  `Waiting for SonarCloud to register pull request ${config.pullRequestNumber} on project ${config.projectKey}.`,
-                );
-              }
-          
-              await sleepFn(config.pollIntervalMs);
-            }
-          
-            const waitedMinutes = Math.max(
-              1,
-              Math.round((config.deadlineMs - config.startedAtMs) / 60000),
-            );
-            throw new Error(
-              `Timed out after ${waitedMinutes} minute(s) waiting for SonarCloud analysis of PR #${config.pullRequestNumber} at commit ${config.headSha}. Ensure SonarCloud analyses pull requests for this repository (CI scanner and/or automatic analysis).`,
-            );
-          }
-          
-          export function stripComponentPath(
-            projectKey: string,
-            component: string,
-          ): string {
-            const prefix = `${projectKey}:`;
-            if (component.startsWith(prefix)) {
-              return component.slice(prefix.length);
-            }
-            return component;
-          }
-          
-          export function sonarIssuesPageUrl(
-            host: string,
-            projectKey: string,
-            pullRequestNumber: number,
-          ): string {
-            return (
-              `${host}/project/issues?id=${encodeURIComponent(projectKey)}` +
-              `&pullRequest=${encodeURIComponent(String(pullRequestNumber))}`
-            );
-          }
-          
-          export async function fetchOpenIssues(
-            config: Pick<
-              SonarConfig,
-              "host" | "token" | "projectKey" | "pullRequestNumber"
-            >,
-            fetchImpl: FetchLike,
-          ): Promise<SonarIssue[]> {
-            const pageSize = 500;
-            const collected: SonarIssue[] = [];
-            let page = 1;
-            let total = Number.POSITIVE_INFINITY;
-          
-            while (collected.length < total) {
-              const path =
-                `/api/issues/search?componentKeys=${encodeURIComponent(config.projectKey)}` +
-                `&pullRequest=${encodeURIComponent(String(config.pullRequestNumber))}` +
-                "&issueStatuses=OPEN,CONFIRMED" +
-                `&ps=${pageSize}&p=${page}`;
-              const data = await sonarGetJson<IssuesSearchPage & { paging?: { total?: number } }>(
-                config.host,
-                config.token,
-                path,
-                fetchImpl,
-              );
-              total = Number(data.total ?? data.paging?.total ?? 0);
-              const issues = Array.isArray(data.issues) ? data.issues : [];
-              collected.push(...issues);
-              if (issues.length === 0 || collected.length >= total) {
-                break;
-              }
-              page += 1;
-            }
-          
-            return collected;
-          }
-          
-          export function printIssues(
-            config: SonarConfig,
-            issues: SonarIssue[],
-          ): void {
-            const pageUrl = sonarIssuesPageUrl(
-              config.host,
-              config.projectKey,
-              config.pullRequestNumber,
-            );
-            console.error(`::error::SonarCloud reports ${issues.length} open issue(s) on this pull request.`);
-            console.error(`Issues in SonarCloud: ${pageUrl}`);
-            for (const issue of issues) {
-              const file = stripComponentPath(config.projectKey, issue.component ?? "");
-              const line = issue.line ?? "?";
-              const rule = issue.rule ?? "unknown-rule";
-              const severity = issue.severity ?? "UNKNOWN";
-              const message = (issue.message ?? "").replace(/\s+/g, " ").trim();
-              console.error(`  [${severity}] ${rule} — ${file}:${line} — ${message}`);
-            }
-          }
-          
-          export async function runSonarZeroIssuesGate(
-            config: SonarConfig,
-            fetchImpl: FetchLike = fetch,
-            waitOptions: WaitOptions = {},
-          ): Promise<number> {
-            await waitForPullRequestAnalysis(config, fetchImpl, waitOptions);
-            const issues = await fetchOpenIssues(config, fetchImpl);
-            if (issues.length === 0) {
-              console.log(
-                `SonarCloud zero open issues: no OPEN or CONFIRMED issues on PR #${config.pullRequestNumber}.`,
-              );
-              return 0;
-            }
-            printIssues(config, issues);
-            return 1;
-          }
-          
-          async function main(): Promise<number> {
-            const config = parseConfigFromEnv(process.env);
-            return runSonarZeroIssuesGate(config);
-          }
-          
-          if (process.argv[1] === fileURLToPath(import.meta.url)) {
-            main()
-              .then((code) => process.exit(code))
-              .catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : String(error);
-                console.error(`::error::${message}`);
-                process.exit(1);
-              });
-          }
-          SONARCLOUD_ZERO_ISSUES_INLINE
-          node "$SONAR_GATE_TS"
+          node reusables/.github/scripts/sonarcloud-zero-issues.ts

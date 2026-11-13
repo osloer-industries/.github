@@ -41,6 +41,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
 | `sonarcloud-zero-issues.yml` | `timeout-minutes` | `20` | Max wait for PR analysis at head SHA |
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
+| `sonarcloud-zero-issues.yml` | `reusables-ref` | *(empty → `github.workflow_sha`)* | `.github` repo commit supplying the gate script |
 | `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
@@ -233,7 +234,9 @@ jobs:
 
 Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
 
-The gate is **inlined in the reusable workflow** (Node 24 `run:` step). Source of truth: `.github/scripts/sonarcloud-zero-issues.ts`; CI keeps it aligned with `node .github/scripts/sonarcloud-zero-issues-inline.ts --check`.
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job checks out that same SHA via `github.workflow_sha` and runs `.github/scripts/sonarcloud-zero-issues.ts` with Node 24. Override only with `reusables-ref` when debugging (must match the script version you intend).
+
+Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 
 ### Node/npm quality
 
