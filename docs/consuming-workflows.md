@@ -17,6 +17,7 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `dependency-review.yml` | Review dependency changes | `pull_request` |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
+| `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
@@ -36,6 +37,11 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | --- | --- | --- | --- |
 | `node-npm-quality.yml` | `check-npm-script` | `check` | npm script passed to `npm run` for the quality gate |
 | `sonarqube-cloud-node.yml` | `coverage-npm-script` | `test:coverage` | npm script that generates coverage before Sonar upload |
+| `sonarcloud-zero-issues.yml` | `project-key` | *(empty → `osloer-industries_<repo>`)* | SonarCloud project key |
+| `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
+| `sonarcloud-zero-issues.yml` | `timeout-minutes` | `20` | Max wait for PR analysis at head SHA |
+| `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
+| `sonarcloud-zero-issues.yml` | `reusables-ref` | *(empty → `github.workflow_sha`)* | `.github` repo commit supplying the gate script |
 | `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
@@ -191,6 +197,46 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
+
+### SonarCloud zero open issues
+
+Use this **in addition to** `sonarqube-cloud-node.yml` and/or SonarCloud automatic analysis. It closes the gap where the Sonar way quality gate stays green while MAJOR (or other) issues remain open.
+
+**Stacked pull requests:** trigger on `pull_request` with **no** `branches:` filter so every base branch (including another PR branch) is gated. In SonarCloud, enable pull request analysis for all branches your workflows target (CI scanner: `sonar.pullrequest.*` properties from the scan action; automatic analysis: org integration settings).
+
+**Required check:** after adoption, add org ruleset / branch protection requirement for job name **`SonarCloud zero open issues`** (exact match). `SONAR_TOKEN` must be present as a repository or organization Actions secret; an empty secret fails the job.
+
+```yaml
+name: SonarCloud
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarcloud-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  zero-open-issues:
+    needs: analyze
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
+
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job checks out that same SHA via `github.workflow_sha` and runs `.github/scripts/sonarcloud-zero-issues.ts` with Node 24. Override only with `reusables-ref` when debugging (must match the script version you intend).
+
+Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 
 ### Node/npm quality
 
