@@ -19,10 +19,6 @@ on:
         description: Seconds between SonarCloud API polls while waiting for analysis
         type: number
         default: 10
-      reusables-ref:
-        description: Commit SHA of osloer-industries/.github that supplies the gate script (empty = caller-pinned workflow SHA from github.workflow_sha)
-        type: string
-        default: ""
     secrets:
       SONAR_TOKEN:
         description: SonarCloud user token with permission to read issues for the project
@@ -36,27 +32,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Resolve reusables commit for gate script
-        id: reusables
-        env:
-          INPUT_REF: ${{ inputs.reusables-ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: |
-          set -euo pipefail
-          ref="${INPUT_REF}"
-          if [ -z "$ref" ]; then
-            ref="${WORKFLOW_SHA}"
-          fi
-          if [ -z "$ref" ]; then
-            echo "::error::Could not resolve osloer-industries/.github ref. Pin uses: to a commit SHA (sets github.workflow_sha) or pass reusables-ref."
-            exit 1
-          fi
-          echo "ref=$ref" >>"$GITHUB_OUTPUT"
-          echo "Using osloer-industries/.github@${ref} for sonarcloud-zero-issues.ts"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: osloer-industries/.github
-          ref: ${{ steps.reusables.outputs.ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: reusables
           sparse-checkout: .github/scripts/sonarcloud-zero-issues.ts
           sparse-checkout-cone-mode: true

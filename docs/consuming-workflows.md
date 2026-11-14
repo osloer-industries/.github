@@ -41,13 +41,11 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `node-npm-quality.yml` | `fetch-depth` | `1` | Checkout depth; use `0` when PR jobs run git-based helpers (guardrail notice, changed-path gates) |
 | `node-npm-quality.yml` | `pr-pre-check-script` | *(empty)* | Caller script run with `node` on `pull_request` only; sets `GUARDRAIL_BASE_REF` to the PR base SHA |
 | `mutation-changed.yml` | `full-npm-script` | `test:mutation` | npm script for full `src/` mutation on default-branch `push` |
-| `mutation-changed.yml` | `reusables-ref` | *(empty → `github.workflow_sha`)* | `.github` commit supplying `run-mutation-changed.ts` |
 | `sonarqube-cloud-node.yml` | `coverage-npm-script` | `test:coverage` | npm script that generates coverage before Sonar upload |
 | `sonarcloud-zero-issues.yml` | `project-key` | *(empty → `osloer-industries_<repo>`)* | SonarCloud project key |
 | `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
 | `sonarcloud-zero-issues.yml` | `timeout-minutes` | `20` | Max wait for PR analysis at head SHA |
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
-| `sonarcloud-zero-issues.yml` | `reusables-ref` | *(empty → `github.workflow_sha`)* | `.github` repo commit supplying the gate script |
 | `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
@@ -252,7 +250,7 @@ jobs:
 
 Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
 
-Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job checks out that same SHA via `github.workflow_sha` and runs `.github/scripts/sonarcloud-zero-issues.ts` with Node 24. Override only with `reusables-ref` when debugging (must match the script version you intend).
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (that is the caller workflow’s file on the caller repo). No extra inputs are required.
 
 Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 
@@ -309,7 +307,7 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@REUSABLES_SHA
 ```
 
-Pin `uses:` to a **full commit SHA** so `github.workflow_sha` checks out matching `run-mutation-changed.ts`. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
+Pin `uses:` to a **full commit SHA**. The PR path checks out `run-mutation-changed.ts` at **`job.workflow_sha`**. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
 
 ### Setup smoke (template)
 

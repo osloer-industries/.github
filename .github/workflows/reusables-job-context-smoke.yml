@@ -1,0 +1,60 @@
+name: Reusable — job workflow context smoke (CI only)
+
+on:
+  workflow_call:
+    inputs:
+      expected-workflow-sha:
+        description: Commit SHA the caller pinned on uses: (must match job.workflow_sha)
+        type: string
+        required: true
+      script-relative-path:
+        description: Path under the reusables repo to sparse-checkout and verify exists
+        type: string
+        default: .github/scripts/sonarcloud-zero-issues.ts
+
+jobs:
+  verify-job-workflow-context:
+    name: job.workflow_sha contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Assert job.workflow_sha matches caller pin
+        env:
+          EXPECTED: ${{ inputs.expected-workflow-sha }}
+          ACTUAL: ${{ job.workflow_sha }}
+          REPOSITORY: ${{ job.workflow_repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ACTUAL" ]; then
+            echo "::error::job.workflow_sha is empty"
+            exit 1
+          fi
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::job.workflow_sha ($ACTUAL) must equal the uses: pin ($EXPECTED); do not use github.workflow_sha for org script checkout"
+            exit 1
+          fi
+          if [ "$REPOSITORY" != "osloer-industries/.github" ]; then
+            echo "::error::job.workflow_repository ($REPOSITORY) must be osloer-industries/.github"
+            exit 1
+          fi
+          echo "job.workflow_sha matches caller pin ($ACTUAL)"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: reusables
+          sparse-checkout: ${{ inputs.script-relative-path }}
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Assert sparse-checkout script exists at pinned SHA
+        env:
+          SCRIPT_PATH: ${{ inputs.script-relative-path }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "reusables/${SCRIPT_PATH}" ]; then
+            echo "::error::Missing reusables/${SCRIPT_PATH} at pin ${{ job.workflow_sha }}"
+            exit 1
+          fi
+          echo "Found reusables/${SCRIPT_PATH}"
