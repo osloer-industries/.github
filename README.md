@@ -15,6 +15,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
+| [mutation-changed.yml](.github/workflows/mutation-changed.yml) | Stryker on changed `src/` for PRs; full mutation script on default-branch push |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
 
@@ -27,6 +28,10 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 ### SonarCloud zero open issues
 
 SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out `osloer-industries/.github` at the same commit SHA the caller pinned (`github.workflow_sha`), or at `reusables-ref` when set. Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+
+### Mutation (changed src)
+
+Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs Stryker against changed non-test `src/**/*.ts` on pull requests (via [`.github/scripts/run-mutation-changed.ts`](.github/scripts/run-mutation-changed.ts)) and `npm run test:mutation` (configurable) on pushes to the default branch. Callers must define Stryker and the full mutation npm script locally; pin `uses:` to a full commit SHA so `github.workflow_sha` resolves the helper script version.
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
 

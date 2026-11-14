@@ -31,16 +31,27 @@ on:
         description: Job timeout
         type: number
         default: 10
+      fetch-depth:
+        description: Checkout fetch-depth (0 for full history and git-based PR helpers)
+        type: number
+        default: 1
+      pr-pre-check-script:
+        description: Optional script path under the caller repo run with node on pull_request only (e.g. scripts/check-guardrail-changes.ts)
+        type: string
+        default: ""
 
 jobs:
   quality:
     name: ${{ inputs.job-name }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: ${{ inputs.fetch-depth }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
@@ -60,6 +71,12 @@ jobs:
             [ -n "$prefix" ] || continue
             npm ci $flags --prefix "$prefix"
           done
+      - name: Pull request pre-check
+        if: github.event_name == 'pull_request' && inputs.pr-pre-check-script != ''
+        env:
+          GUARDRAIL_BASE_REF: ${{ github.event.pull_request.base.sha }}
+          PR_PRE_CHECK_SCRIPT: ${{ inputs.pr-pre-check-script }}
+        run: node "$PR_PRE_CHECK_SCRIPT"
       - name: Audit production dependencies
         env:
           NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
