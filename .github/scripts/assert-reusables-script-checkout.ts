@@ -1,6 +1,7 @@
 /**
  * Reusable workflows that sparse-checkout org scripts must resolve the pin via
- * JOB_WORKFLOW_SHA (runner env for job.workflow_sha), not github.workflow_sha.
+ * JOB_WORKFLOW_SHA (runner env for job.workflow_sha), forwarded through a step output
+ * for checkout — not github.workflow_sha (caller workflow).
  */
 import { readFileSync } from "node:fs";
 
@@ -28,19 +29,19 @@ for (const workflowPath of WORKFLOWS) {
   if (yaml.includes("github.workflow_sha")) {
     violations.push("must not use github.workflow_sha for script checkout");
   }
-  if (yaml.includes("job.workflow_sha") || yaml.includes("job.workflow_repository")) {
+  if (yaml.includes("job.workflow_sha")) {
     violations.push(
-      "must use env.JOB_WORKFLOW_SHA in YAML (actionlint 1.7.12 does not model job.workflow_*; runner injects the same values as JOB_* env vars)",
+      "must not reference job.workflow_sha in YAML expressions (use shell JOB_WORKFLOW_SHA plus steps.*.outputs.sha)",
     );
   }
-  if (!yaml.includes("env.JOB_WORKFLOW_SHA")) {
-    violations.push("must checkout vendored scripts with env.JOB_WORKFLOW_SHA");
+  if (!yaml.includes("JOB_WORKFLOW_SHA")) {
+    violations.push("must read JOB_WORKFLOW_SHA in a run step");
+  }
+  if (!yaml.includes("steps.reusables-pin.outputs.sha")) {
+    violations.push("must checkout vendored scripts via steps.reusables-pin.outputs.sha");
   }
   if (!yaml.includes("repository: osloer-industries/.github")) {
     violations.push("must sparse-checkout from osloer-industries/.github");
-  }
-  if (/Resolve reusables commit/.test(yaml)) {
-    violations.push("must not resolve reusables ref via a separate shell step");
   }
 
   if (violations.length > 0) {
@@ -49,5 +50,5 @@ for (const workflowPath of WORKFLOWS) {
     }
     process.exit(1);
   }
-  console.log(`${workflowPath} uses JOB_WORKFLOW_SHA for vendored script checkout.`);
+  console.log(`${workflowPath} forwards JOB_WORKFLOW_SHA for vendored script checkout.`);
 }
