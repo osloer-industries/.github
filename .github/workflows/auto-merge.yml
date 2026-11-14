@@ -1,0 +1,87 @@
+name: Reusable — auto-merge low-risk PRs
+
+on:
+  workflow_call:
+    inputs:
+      release-app-id:
+        description: GitHub App ID for osloer-reviewer (mint installation token)
+        type: string
+        required: true
+      merge-method:
+        description: Auto-merge method (squash, merge, or rebase)
+        type: string
+        default: squash
+      allow-release-prs:
+        description: Enable auto-merge for Release Please PRs from osloer-reviewer
+        type: boolean
+        default: true
+      allow-dependabot:
+        description: Enable auto-merge for Dependabot patch/minor PRs
+        type: boolean
+        default: true
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        description: PEM private key for the release GitHub App
+        required: true
+
+jobs:
+  auto-merge:
+    name: Auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      (
+        (inputs.allow-dependabot == true && github.event.pull_request.user.login == 'dependabot[bot]') ||
+        (inputs.allow-release-prs == true && github.event.pull_request.user.login == 'osloer-reviewer[bot]')
+      )
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Dependabot metadata
+        if: inputs.allow-dependabot == true && github.event.pull_request.user.login == 'dependabot[bot]'
+        id: dependabot
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables
+          sparse-checkout: |
+            .github/scripts/auto-merge.ts
+            .github/scripts/auto-merge-eligibility.ts
+            .github/scripts/release-please-version-gate.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Mint osloer-reviewer installation token
+        id: release-app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ inputs.release-app-id }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+      - name: Approve and enable auto-merge
+        env:
+          GITHUB_APP_TOKEN: ${{ steps.release-app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_METHOD: ${{ inputs.merge-method }}
+          ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot }}
+          ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs }}
+          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type }}
+          DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node reusables/.github/scripts/auto-merge.ts

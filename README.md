@@ -18,6 +18,8 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [mutation-changed.yml](.github/workflows/mutation-changed.yml) | Stryker on changed `src/` for PRs; full mutation script on default-branch push |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
+| [auto-merge.yml](.github/workflows/auto-merge.yml) | Approve and enable `gh pr merge --auto` for Dependabot patch/minor and Release Please patch/minor (non-breaking); major or breaking releases get `release:major-hold` for manual merge |
+| [ci-passed.yml](.github/workflows/ci-passed.yml) | Final aggregate job: fail unless every `needs` job succeeded (`if: always()`) |
 
 ### CodeQL SARIF security gate (artifact mode)
 

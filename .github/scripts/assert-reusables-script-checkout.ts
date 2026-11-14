@@ -7,6 +7,8 @@ import { readFileSync } from "node:fs";
 const WORKFLOWS = [
   ".github/workflows/sonarcloud-zero-issues.yml",
   ".github/workflows/mutation-changed.yml",
+  ".github/workflows/auto-merge.yml",
+  ".github/workflows/ci-passed.yml",
 ] as const;
 
 function load(path: string): string {

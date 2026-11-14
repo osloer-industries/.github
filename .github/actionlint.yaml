@@ -10,3 +10,9 @@ paths:
   .github/workflows/reusables-job-context-smoke.yml:
     ignore:
       - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/auto-merge.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/ci-passed.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'

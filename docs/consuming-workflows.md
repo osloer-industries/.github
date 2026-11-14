@@ -59,6 +59,8 @@ The `osloer-reusables` group keeps every `osloer-industries/.github` reusable on
 | `mutation-changed.yml` | Mutation (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
+| `auto-merge.yml` | Auto-merge (optional; osloer-reviewer) | `pull_request` (types: opened, synchronize, reopened, ready_for_review) |
+| `ci-passed.yml` | Aggregate required check | Called as the final job in the main CI workflow |
 
 ### Reusable workflow inputs (workflow security)
 
@@ -366,6 +368,108 @@ jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA # v0.x.y
 ```
+
+### Auto-merge (Dependabot and Release Please)
+
+Approves and enables **auto-merge** (`gh pr merge --auto` only — merges complete after required checks are green) for low-risk pull requests via the **osloer-reviewer** GitHub App. The reusable workflow does **not** check out pull request code and does **not** use `pull_request_target`.
+
+**Eligibility (skipped cleanly when not met):**
+
+- **Dependabot** (`github.event.pull_request.user.login == 'dependabot[bot]'`): `dependabot/fetch-metadata` update type `version-update:semver-patch` or `version-update:semver-minor` only (never major). Patch/minor updates in the Dependabot group `osloer-reusables` follow the same rule.
+- **Release Please** (`osloer-reviewer[bot]`, head ref `release-please--*`, file allowlist): only `CHANGELOG.md`, `**/CHANGELOG.md`, `.release-please-manifest.json`, `package.json`, `package-lock.json`, and `version.txt`; `package.json` / `package-lock.json` diffs must touch the `version` field only (verified via the pull request files API).
+- **Release Please semver gate:** reads the `.release-please-manifest.json` diff per component (patch/minor only). Skips auto-merge when the major version increases, when the PR body or CHANGELOG diff contains `BREAKING CHANGE` or `⚠ BREAKING CHANGES` (including pre-1.0 releases where breaking changes bump minor), or when the manifest cannot be parsed (fail closed). Those PRs stay open and Release Please keeps updating them; the workflow applies label **`release:major-hold`** once (or posts a comment if labeling fails) so maintainers merge majors manually. Patch/minor releases without breaking markers still auto-merge.
+
+Configure `vars` with the app ID (for example `OSLOER_RELEASE_APP_ID`) and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM). For Dependabot branches, add the same secret as a **Dependabot secret** so workflows on `dependabot/*` can mint the installation token.
+
+```yaml
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: auto-merge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.draft == false
+    uses: osloer-industries/.github/.github/workflows/auto-merge.yml@REUSABLES_SHA # v0.x.y
+    with:
+      release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
+      merge-method: squash
+      allow-release-prs: true
+      allow-dependabot: true
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+```
+
+`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s caller [`.github/workflows/auto-merge-caller.yml`](.github/workflows/auto-merge-caller.yml) uses `merge` because release tags are created from merge commits here.
+
+Rely on org rulesets / branch protection **required status checks** so auto-merge does not complete until every gate is green. In practice register only **`ci-passed`** as required (see below); auto-merge then waits for that single aggregate check.
+
+### ci-passed (single required check)
+
+Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success` (skipped, cancelled, and failure all fail closed).
+
+**Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required—`ci-passed` already aggregates them. Auto-merge (`auto-merge.yml`) relies on required checks; with only `ci-passed` required, Dependabot and Release Please PRs merge once the full pipeline is green.
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA # v0.x.y
+
+  workflow-security:
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA # v0.x.y
+
+  codeql:
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA # v0.x.y
+
+  sonar-analyze:
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA # v0.x.y
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  sonar-zero-open-issues:
+    needs: sonar-analyze
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  ci-passed:
+    name: ci-passed
+    needs:
+      - quality
+      - workflow-security
+      - codeql
+      - sonar-zero-open-issues
+    if: always()
+    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@REUSABLES_SHA # v0.x.y
+    with:
+      needs-json: ${{ toJSON(needs) }}
+```
+
+This repository’s [`ci.yml`](.github/workflows/ci.yml) ends with an **inlined** `ci-passed` job (same `ci-passed-gate.ts` logic as the reusable). [`workflow-security.yml`](.github/workflows/workflow-security.yml) still runs on the same events via its own `pull_request` / `push` trigger until actionlint accepts GitHub’s `$/` same-repository `uses:` form and callers can drop `./` without zizmor `self-repository` findings. **Consumer repositories** should run workflow-security inside the main CI workflow and list it under `ci-passed` `needs:` as in the example above; org rulesets should require only **`ci-passed`** there.
 
 ### Workflow security (actionlint + zizmor)
 
