@@ -272,7 +272,7 @@ Use this **in addition to** `sonarqube-cloud-node.yml` and/or SonarCloud automat
 
 **Stacked pull requests:** trigger on `pull_request` with **no** `branches:` filter so every base branch (including another PR branch) is gated. In SonarCloud, enable pull request analysis for all branches your workflows target (CI scanner: `sonar.pullrequest.*` properties from the scan action; automatic analysis: org integration settings).
 
-**Required check:** after adoption, add org ruleset / branch protection requirement for job name **`SonarCloud zero open issues`** (exact match). `SONAR_TOKEN` must be present as a repository or organization Actions secret; an empty secret fails the job.
+**ci-passed wiring:** run this job in the main CI workflow and list it in **`ci-passed` `needs:`** (with Workflow security, CodeQL, quality, and any other gates). Org rulesets should require only **`ci-passed`**, not **`SonarCloud zero open issues`** as a separate required check. `SONAR_TOKEN` must be present as a repository or organization Actions secret; an empty secret fails the job.
 
 ```yaml
 name: SonarCloud
@@ -375,7 +375,7 @@ Approves and enables **auto-merge** (`gh pr merge --auto` only — merges comple
 
 **Eligibility (skipped cleanly when not met):**
 
-- **Dependabot** (`github.event.pull_request.user.login == 'dependabot[bot]'`): `dependabot/fetch-metadata` update type `version-update:semver-patch` or `version-update:semver-minor` only (never major). Patch/minor updates in the Dependabot group `osloer-reusables` follow the same rule.
+- **Dependabot** (`github.event.pull_request.user.login == 'dependabot[bot]'`): `dependabot/fetch-metadata` update type `version-update:semver-patch` or `version-update:semver-minor` only — **majors never auto-merge** (wait for a human). Patch/minor updates in the Dependabot group `osloer-reusables` follow the same rule.
 - **Release Please** (`osloer-reviewer[bot]`, head ref `release-please--*`, file allowlist): only `CHANGELOG.md`, `**/CHANGELOG.md`, `.release-please-manifest.json`, `package.json`, `package-lock.json`, and `version.txt`; `package.json` / `package-lock.json` diffs must touch the `version` field only (verified via the pull request files API).
 - **Release Please semver gate:** reads the `.release-please-manifest.json` diff per component (patch/minor only). Skips auto-merge when the major version increases, when the PR body or CHANGELOG diff contains `BREAKING CHANGE` or `⚠ BREAKING CHANGES` (including pre-1.0 releases where breaking changes bump minor), or when the manifest cannot be parsed (fail closed). Those PRs stay open and Release Please keeps updating them; the workflow applies label **`release:major-hold`** once (or posts a comment if labeling fails) so maintainers merge majors manually. Patch/minor releases without breaking markers still auto-merge.
 
