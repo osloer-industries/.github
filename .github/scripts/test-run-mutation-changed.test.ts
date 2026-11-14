@@ -31,6 +31,28 @@ function gitCommit(repoDir: string, message: string, paths: string[]): string {
   return execFileSync(defaultGit, ["rev-parse", "HEAD"], { cwd: repoDir, encoding: "utf8" }).trim();
 }
 
+interface MutationCliRepo {
+  tempDir: string;
+  moduleUrl: string;
+  base: string;
+}
+
+function prepareMutationCliRepo(prefix: string): MutationCliRepo {
+  const tempDir = mkdtempSync(join(tmpdir(), prefix));
+  initGitRepo(tempDir);
+  const scriptsDir = join(tempDir, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+  const modulePath = join(scriptsDir, "run-mutation-changed.ts");
+  writeFileSync(
+    modulePath,
+    readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "run-mutation-changed.ts"), "utf8"),
+    "utf8",
+  );
+  writeFileSync(join(tempDir, "README.md"), "# base\n", "utf8");
+  const base = gitCommit(tempDir, "base", ["README.md", "scripts/run-mutation-changed.ts"]);
+  return { tempDir, moduleUrl: `file://${modulePath}`, base };
+}
+
 test("isMutableSrcFile accepts production src and rejects tests", () => {
   assert.equal(isMutableSrcFile("src/index.ts"), true);
   assert.equal(isMutableSrcFile("src/lib/foo.ts"), true);
@@ -81,25 +103,10 @@ test("listChangedPaths returns paths between refs", () => {
 });
 
 test("runMutationChangedCli skips when no mutable src changes", () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "mutation-skip-"));
+  const { tempDir, moduleUrl, base } = prepareMutationCliRepo("mutation-skip-");
   try {
-    initGitRepo(tempDir);
-    const scriptsDir = join(tempDir, "scripts");
-    mkdirSync(scriptsDir, { recursive: true });
-    const modulePath = join(scriptsDir, "run-mutation-changed.ts");
-    writeFileSync(
-      modulePath,
-      readFileSync(
-        resolve(dirname(fileURLToPath(import.meta.url)), "run-mutation-changed.ts"),
-        "utf8",
-      ),
-      "utf8",
-    );
-    writeFileSync(join(tempDir, "README.md"), "# base\n", "utf8");
-    const base = gitCommit(tempDir, "base", ["README.md", "scripts/run-mutation-changed.ts"]);
     writeFileSync(join(tempDir, "AGENTS.md"), "# agents\n", "utf8");
     const head = gitCommit(tempDir, "docs", ["AGENTS.md"]);
-    const moduleUrl = `file://${modulePath}`;
     let output = "";
     const originalWrite = process.stdout.write.bind(process.stdout);
     process.stdout.write = ((chunk) => {
@@ -118,22 +125,8 @@ test("runMutationChangedCli skips when no mutable src changes", () => {
 });
 
 test("runMutationChangedCli invokes Stryker for mutable src paths", () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "mutation-run-"));
+  const { tempDir, moduleUrl, base } = prepareMutationCliRepo("mutation-run-");
   try {
-    initGitRepo(tempDir);
-    const scriptsDir = join(tempDir, "scripts");
-    mkdirSync(scriptsDir, { recursive: true });
-    const modulePath = join(scriptsDir, "run-mutation-changed.ts");
-    writeFileSync(
-      modulePath,
-      readFileSync(
-        resolve(dirname(fileURLToPath(import.meta.url)), "run-mutation-changed.ts"),
-        "utf8",
-      ),
-      "utf8",
-    );
-    writeFileSync(join(tempDir, "README.md"), "# base\n", "utf8");
-    const base = gitCommit(tempDir, "base", ["README.md", "scripts/run-mutation-changed.ts"]);
     mkdirSync(join(tempDir, "src"), { recursive: true });
     writeFileSync(join(tempDir, "src", "index.ts"), "export {};\n", "utf8");
     const head = gitCommit(tempDir, "src", ["src/index.ts"]);
@@ -141,7 +134,6 @@ test("runMutationChangedCli invokes Stryker for mutable src paths", () => {
     const strykerPath = join(tempDir, "node_modules", ".bin", "stryker");
     writeFileSync(strykerPath, "#!/bin/sh\necho \"$@\" > .stryker-invoked\nexit 0\n", "utf8");
     chmodSync(strykerPath, 0o755);
-    const moduleUrl = `file://${modulePath}`;
     runMutationChangedCli(moduleUrl, [base, head]);
     const invoked = readFileSync(join(tempDir, ".stryker-invoked"), "utf8");
     assert.match(invoked, /src\/index\.ts/);
