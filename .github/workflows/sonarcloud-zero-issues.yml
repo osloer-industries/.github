@@ -32,23 +32,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Resolve reusables pin from job workflow identity
-        id: reusables-pin
-        run: |
-          set -euo pipefail
-          if [ -z "${JOB_WORKFLOW_SHA}" ]; then
-            echo "::error::JOB_WORKFLOW_SHA is empty — pin uses: to a full commit SHA on osloer-industries/.github"
-            exit 1
-          fi
-          if [ "${JOB_WORKFLOW_REPOSITORY}" != "osloer-industries/.github" ]; then
-            echo "::error::JOB_WORKFLOW_REPOSITORY must be osloer-industries/.github (got ${JOB_WORKFLOW_REPOSITORY})"
-            exit 1
-          fi
-          echo "sha=${JOB_WORKFLOW_SHA}" >>"$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: osloer-industries/.github
-          ref: ${{ steps.reusables-pin.outputs.sha }}
+          ref: ${{ job.workflow_sha }}
           path: reusables
           sparse-checkout: .github/scripts/sonarcloud-zero-issues.ts
           sparse-checkout-cone-mode: true
