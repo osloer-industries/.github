@@ -19,10 +19,6 @@ on:
         description: Job timeout
         type: number
         default: 10
-      reusables-ref:
-        description: Commit SHA of osloer-industries/.github that supplies run-mutation-changed.ts (empty = caller-pinned workflow SHA from github.workflow_sha)
-        type: string
-        default: ""
 
 jobs:
   mutation:
@@ -41,28 +37,11 @@ jobs:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Resolve reusables commit for mutation helper
-        if: github.event_name == 'pull_request'
-        id: reusables
-        env:
-          INPUT_REF: ${{ inputs.reusables-ref }}
-          WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: |
-          set -euo pipefail
-          ref="${INPUT_REF}"
-          if [ -z "$ref" ]; then
-            ref="${WORKFLOW_SHA}"
-          fi
-          if [ -z "$ref" ]; then
-            echo "::error::Could not resolve osloer-industries/.github ref. Pin uses: to a commit SHA or pass reusables-ref."
-            exit 1
-          fi
-          echo "ref=$ref" >>"$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         with:
-          repository: osloer-industries/.github
-          ref: ${{ steps.reusables.outputs.ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: reusables
           sparse-checkout: .github/scripts/run-mutation-changed.ts
           sparse-checkout-cone-mode: true
