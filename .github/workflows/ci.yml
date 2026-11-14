@@ -108,6 +108,8 @@ jobs:
           node-version: "24"
       - name: Run auto-merge eligibility unit tests
         run: node --test .github/scripts/test-auto-merge-eligibility.test.ts
+      - name: Run release-please version gate unit tests
+        run: node --test .github/scripts/test-release-please-version-gate.test.ts
       - name: Run auto-merge workflow contract tests
         run: node --test .github/scripts/test-assert-auto-merge-workflow.test.ts
       - name: Run ci-passed gate unit tests

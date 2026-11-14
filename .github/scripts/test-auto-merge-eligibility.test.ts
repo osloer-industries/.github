@@ -20,6 +20,7 @@ function baseCfg(overrides: Partial<AutoMergeEnv> = {}): AutoMergeEnv {
     repository: "osloer-industries/example",
     dependabotUpdateType: "version-update:semver-patch",
     dependabotDependencyGroup: "",
+    prBody: "",
     token: "token",
     ...overrides,
   };

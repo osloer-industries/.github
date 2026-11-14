@@ -32,6 +32,7 @@ Shared reusable GitHub Actions workflows and TypeScript CI gates for the org.
 - Stable default check name: job **`Auto-merge`**.
 - After editing the script, unit tests run in `ci.yml` (`Auto-merge unit tests`).
 - Uses `gh pr merge --auto` only (never direct merge). Caller must use `pull_request`, not `pull_request_target`. Dependabot PRs need `RELEASE_APP_PRIVATE_KEY` as a Dependabot secret when the workflow runs on Dependabot branches.
+- Release Please: gate in `.github/scripts/release-please-version-gate.ts` (manifest patch/minor only; no breaking markers; major bumps → label `release:major-hold`).
 - Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks) is green.
 
 ## Mutation (changed src)

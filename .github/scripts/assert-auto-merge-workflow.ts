@@ -122,6 +122,23 @@ if (!reusable.includes("permission-pull-requests: write")) {
   fail(REUSABLE, "create-github-app-token must request permission-pull-requests: write");
 }
 
+if (!reusable.includes("permission-issues: write")) {
+  fail(REUSABLE, "create-github-app-token must request permission-issues: write (release:major-hold label)");
+}
+
+if (!reusable.includes("PR_BODY: ${{ github.event.pull_request.body }}")) {
+  fail(REUSABLE, "must pass PR body for Release Please breaking-change detection");
+}
+
+if (!reusable.includes("release-please-version-gate.ts")) {
+  fail(REUSABLE, "must sparse-checkout release-please-version-gate.ts");
+}
+
+const gateScript = load(".github/scripts/release-please-version-gate.ts");
+if (!gateScript.includes("RELEASE_MAJOR_HOLD_LABEL")) {
+  fail(".github/scripts/release-please-version-gate.ts", "must define release:major-hold label");
+}
+
 if (!reusable.includes("job.workflow_sha")) {
   fail(REUSABLE, "script checkout must use job.workflow_sha");
 }

@@ -54,6 +54,7 @@ jobs:
           sparse-checkout: |
             .github/scripts/auto-merge.ts
             .github/scripts/auto-merge-eligibility.ts
+            .github/scripts/release-please-version-gate.ts
           sparse-checkout-cone-mode: true
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -68,6 +69,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
+          permission-issues: write
           permission-pull-requests: write
       - name: Approve and enable auto-merge
         env:
@@ -81,4 +83,5 @@ jobs:
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs }}
           DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type }}
           DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: node reusables/.github/scripts/auto-merge.ts

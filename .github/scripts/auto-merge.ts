@@ -15,6 +15,10 @@ import {
   releasePrFilesEligible,
   type PullRequestFileLike,
 } from "./auto-merge-eligibility.ts";
+import {
+  RELEASE_MAJOR_HOLD_LABEL,
+  evaluateReleaseVersionGate,
+} from "./release-please-version-gate.ts";
 
 export interface AutoMergeEnv {
   allowDependabot: boolean;
@@ -26,6 +30,7 @@ export interface AutoMergeEnv {
   repository: string;
   dependabotUpdateType: string;
   dependabotDependencyGroup: string;
+  prBody: string;
   token: string;
 }
 
@@ -80,6 +85,7 @@ export function parseEnv(env: NodeJS.ProcessEnv): AutoMergeEnv {
     repository,
     dependabotUpdateType: (env.DEPENDABOT_UPDATE_TYPE ?? "").trim(),
     dependabotDependencyGroup: (env.DEPENDABOT_DEPENDENCY_GROUP ?? "").trim(),
+    prBody: env.PR_BODY ?? "",
     token,
   };
 }
@@ -201,6 +207,68 @@ function approvePullRequest(cfg: AutoMergeEnv): void {
   console.log(`Approved pull request #${cfg.prNumber}.`);
 }
 
+function pullRequestHasLabel(cfg: AutoMergeEnv, label: string): boolean {
+  const result = gh(
+    [
+      "api",
+      `repos/${cfg.repository}/issues/${cfg.prNumber}/labels`,
+      "--paginate",
+      "-q",
+      ".[].name",
+    ],
+    cfg.token,
+    cfg.repository,
+  );
+  if (!result.ok) {
+    console.error(`::error::Failed to list pull request labels: ${result.stderr.trim()}`);
+    process.exit(1);
+  }
+  const names = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return names.includes(label);
+}
+
+function ensureMajorHoldLabel(cfg: AutoMergeEnv, reason: string): void {
+  if (pullRequestHasLabel(cfg, RELEASE_MAJOR_HOLD_LABEL)) {
+    console.log(`Pull request already has label ${RELEASE_MAJOR_HOLD_LABEL}.`);
+    return;
+  }
+  const result = gh(
+    [
+      "api",
+      "--method",
+      "POST",
+      `repos/${cfg.repository}/issues/${cfg.prNumber}/labels`,
+      "-f",
+      `labels[]=${RELEASE_MAJOR_HOLD_LABEL}`,
+    ],
+    cfg.token,
+    cfg.repository,
+  );
+  if (!result.ok) {
+    const comment = gh(
+      [
+        "pr",
+        "comment",
+        String(cfg.prNumber),
+        "--body",
+        `Auto-merge withheld (${RELEASE_MAJOR_HOLD_LABEL}): ${reason}`,
+      ],
+      cfg.token,
+      cfg.repository,
+    );
+    if (!comment.ok) {
+      console.error(`::error::Failed to apply ${RELEASE_MAJOR_HOLD_LABEL} or comment: ${result.stderr.trim()}`);
+      process.exit(1);
+    }
+    console.log(`Posted major-hold comment on pull request #${cfg.prNumber}.`);
+    return;
+  }
+  console.log(`Applied label ${RELEASE_MAJOR_HOLD_LABEL} to pull request #${cfg.prNumber}.`);
+}
+
 function enableAutoMerge(cfg: AutoMergeEnv): void {
   const args = ["pr", "merge", String(cfg.prNumber), "--auto", `--${cfg.mergeMethod}`];
   const result = gh(args, cfg.token, cfg.repository);
@@ -222,6 +290,15 @@ export function runAutoMerge(cfg: AutoMergeEnv): void {
     const files = fetchPullRequestFiles(cfg);
     if (!releasePrFilesEligible(files)) {
       console.log("Skipping auto-merge: release PR changed files are outside the allowlist or version-only contract.");
+      return;
+    }
+    const versionGate = evaluateReleaseVersionGate(files, cfg.prBody);
+    if (!versionGate.autoMerge) {
+      const logReason = `Skipping auto-merge: ${versionGate.reason}.`;
+      console.log(logReason);
+      if ("majorHold" in versionGate && versionGate.majorHold) {
+        ensureMajorHoldLabel(cfg, versionGate.reason);
+      }
       return;
     }
   }
