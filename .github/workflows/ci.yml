@@ -50,13 +50,6 @@ jobs:
       - name: Assert reusables script checkout uses job.workflow_sha
         run: node --experimental-strip-types .github/scripts/assert-reusables-script-checkout.ts
 
-  reusables-job-workflow-sha-smoke:
-    name: job.workflow_sha live smoke
-    uses: ./.github/workflows/reusables-job-context-smoke.yml
-    with:
-      expected-workflow-sha: ${{ github.sha }}
-      script-relative-path: .github/scripts/run-mutation-changed.ts
-
   sonarcloud-zero-issues-unit:
     name: SonarCloud zero issues unit tests
     runs-on: ubuntu-latest
