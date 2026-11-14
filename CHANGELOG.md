@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/osloer-industries/.github/compare/v0.1.1...v0.1.2) (2026-11-14)
+
+
+### Features
+
+* **auto-merge:** low-risk auto-merge and ci-passed aggregate gate ([#25](https://github.com/osloer-industries/.github/issues/25)) ([2a0ad81](https://github.com/osloer-industries/.github/commit/2a0ad814f5322e4f13727a8fe11b4083e60b44eb))
+
 ## [0.1.1](https://github.com/osloer-industries/.github/compare/v0.1.0...v0.1.1) (2026-11-14)
 
 
