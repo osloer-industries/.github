@@ -52,7 +52,7 @@ jobs:
 
   reusables-job-workflow-sha-smoke:
     name: job.workflow_sha live smoke
-    uses: $/reusables-job-context-smoke.yml
+    uses: osloer-industries/.github/.github/workflows/reusables-job-context-smoke.yml@${{ github.sha }}
     with:
       expected-workflow-sha: ${{ github.sha }}
       script-relative-path: .github/scripts/run-mutation-changed.ts
