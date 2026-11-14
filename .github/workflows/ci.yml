@@ -49,6 +49,8 @@ jobs:
         run: node .github/scripts/zizmor-thresholds-inline.ts --check
       - name: Assert reusables script checkout uses job.workflow_sha
         run: node --experimental-strip-types .github/scripts/assert-reusables-script-checkout.ts
+      - name: Assert reusable workflows with direct triggers avoid caller-event mistakes
+        run: node --experimental-strip-types .github/scripts/assert-reusable-workflow-triggers.ts
 
   sonarcloud-zero-issues-unit:
     name: SonarCloud zero issues unit tests
@@ -65,6 +67,22 @@ jobs:
           node-version: "24"
       - name: Run SonarCloud zero issues unit tests
         run: node --test .github/scripts/test-sonarcloud-zero-issues.test.ts
+
+  reusable-workflow-triggers-unit:
+    name: Reusable workflow trigger unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Run reusable workflow trigger contract tests
+        run: node --test .github/scripts/test-assert-reusable-workflow-triggers.test.ts
 
   mutation-changed-unit:
     name: Mutation changed unit tests
