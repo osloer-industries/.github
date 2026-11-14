@@ -4,8 +4,11 @@ on:
   workflow_call:
     secrets:
       RELEASE_TOKEN:
-        description: Token with contents, issues, and pull-request write for release PRs
-        required: true
+        description: Token with contents and pull-request write for release PRs (when not using a GitHub App)
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: PEM private key for the release GitHub App (paired with release-app-id input)
+        required: false
     inputs:
       config-file:
         description: Release Please config path in the caller repository
@@ -19,6 +22,18 @@ on:
         description: Job timeout
         type: number
         default: 10
+      release-app-id:
+        description: GitHub App ID for minting a repository-scoped installation token (empty = use RELEASE_TOKEN secret)
+        type: string
+        default: ""
+      release-app-owner:
+        description: Organization or user that owns the repositories list when minting an app token
+        type: string
+        default: ""
+      release-app-repositories:
+        description: Comma-separated repository names (under release-app-owner) to scope the installation token
+        type: string
+        default: ""
 
 jobs:
   release-please:
@@ -26,11 +41,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
     steps:
-      - name: Create or update release pull request
+      - name: Mint release GitHub App token
+        if: inputs.release-app-id != ''
+        id: release-app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ inputs.release-app-id }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.release-app-owner }}
+          repositories: ${{ inputs.release-app-repositories }}
+      - name: Create or update release pull request (GitHub App)
+        if: inputs.release-app-id != ''
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.release-app-token.outputs.token }}
+          config-file: ${{ inputs.config-file }}
+          manifest-file: ${{ inputs.manifest-file }}
+      - name: Create or update release pull request (caller token)
+        if: inputs.release-app-id == ''
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_TOKEN }}

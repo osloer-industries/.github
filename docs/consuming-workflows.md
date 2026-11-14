@@ -200,22 +200,53 @@ jobs:
 
 ### Release Please
 
+**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and `secrets.OSLOER_RELEASE_APP_PRIVATE_KEY` on this repository. Install the app on the org with **Contents** and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
+
 ```yaml
 name: Release
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release-please
   cancel-in-progress: false
+
+jobs:
+  release-please:
+    uses: $/.github/workflows/release-please.yml
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.OSLOER_RELEASE_APP_PRIVATE_KEY }}
+    with:
+      release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
+      release-app-owner: osloer-industries
+      release-app-repositories: .github
+```
+
+**Other consumer repos** can call the reusable with a PAT or org token in `secrets.RELEASE_TOKEN` (workflow-level `contents: read` is enough when minting an app token inside the reusable; otherwise match token permissions). GitHub App path on a consumer (optional inputs mirror the example above):
+
+```yaml
+jobs:
+  release-please:
+    uses: osloer-industries/.github/.github/workflows/release-please.yml@REUSABLES_SHA # v0.x.y
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.MY_RELEASE_APP_PRIVATE_KEY }}
+    with:
+      release-app-id: ${{ vars.MY_RELEASE_APP_ID }}
+      release-app-owner: osloer-industries
+      release-app-repositories: my-repo
+```
+
+Fallback without a GitHub App (release PRs may not trigger CI):
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   release-please:
@@ -224,7 +255,7 @@ jobs:
       RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The reusable job declares `contents: write`, `issues: write`, and `pull-requests: write`. Callers should set the same permissions at workflow level (as above) so Release Please can open and update release pull requests. Prefer `RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}` when the default token has sufficient rights; use a dedicated secret only where org policy requires it.
+The reusable job uses `permissions: contents: read` when minting an app token with `actions/create-github-app-token`; Release Please uses the installation token or `RELEASE_TOKEN` you supply.
 
 ### SonarQube Cloud (Node)
 

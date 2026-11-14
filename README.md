@@ -36,7 +36,7 @@ Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs S
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML, semver tags, and Dependabot.
 
-This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release.yml). Caller workflows on `main` open and merge release PRs here; merging a release PR creates the Git tag.
+This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release.yml). On each push to `main`, the release workflow mints an installation token for the **osloer-reviewer** GitHub App (`vars.OSLOER_RELEASE_APP_ID`, `secrets.OSLOER_RELEASE_APP_PRIVATE_KEY`, scoped to this repository only) so Release Please opens release PRs that trigger CI like any other contributor. The app is installed on the **osloer-industries** org with **Contents** and **Pull requests** read and write. A maintainer merges the release PR when checks are green; that merge creates the Git tag (the automatic release step).
 
 ## Adoption
 

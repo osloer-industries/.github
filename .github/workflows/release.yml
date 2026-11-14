@@ -5,9 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release-please
@@ -15,6 +13,10 @@ concurrency:
 
 jobs:
   release-please:
-    uses: ./.github/workflows/release-please.yml
+    uses: $/.github/workflows/release-please.yml
     secrets:
-      RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.OSLOER_RELEASE_APP_PRIVATE_KEY }}
+    with:
+      release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
+      release-app-owner: osloer-industries
+      release-app-repositories: .github

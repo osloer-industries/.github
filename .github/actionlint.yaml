@@ -1,6 +1,9 @@
 # actionlint 1.7.12 predates documented job.workflow_* on reusable jobs (GitHub runner injects them).
 # Remove these ignores when workflow-security installs actionlint that includes PR rhysd/actionlint#696+.
 paths:
+  .github/workflows/release.yml:
+    ignore:
+      - '\[workflow-call\]'
   .github/workflows/sonarcloud-zero-issues.yml:
     ignore:
       - 'property "workflow_sha" is not defined in object type'
