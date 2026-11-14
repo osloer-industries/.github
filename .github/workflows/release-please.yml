@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       RELEASE_TOKEN:
-        description: Token with contents and pull-request write for release PRs (when not using a GitHub App)
+        description: Token with contents, workflows, and pull-request write for release PRs (when not using a GitHub App)
         required: false
       RELEASE_APP_PRIVATE_KEY:
         description: PEM private key for the release GitHub App (paired with release-app-id input)
@@ -63,6 +63,7 @@ jobs:
           repositories: .github
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
       - name: Mint release GitHub App token (reusable caller)
         if: inputs.release-app-id != ''
         id: release-app-token
@@ -74,6 +75,7 @@ jobs:
           repositories: ${{ inputs.release-app-repositories }}
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
       - name: Create or update release pull request (osloer-industries/.github)
         if: github.repository == 'osloer-industries/.github' && inputs.release-app-id == ''
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
