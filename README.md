@@ -11,7 +11,8 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
-| [release-please.yml](.github/workflows/release-please.yml) | Release Please |
+| [release-please.yml](.github/workflows/release-please.yml) | Release Please (reusable) |
+| [release.yml](.github/workflows/release.yml) | Release Please on `main` (this repo only) |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
@@ -33,10 +34,12 @@ SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts
 
 Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs Stryker against changed non-test `src/**/*.ts` on pull requests (via [`.github/scripts/run-mutation-changed.ts`](.github/scripts/run-mutation-changed.ts)) and `npm run test:mutation` (configurable) on pushes to the default branch. Callers must define Stryker and the full mutation npm script locally; pin `uses:` to a full commit SHA; the helper is fetched at **`job.workflow_sha`**.
 
-See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
+See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML, semver tags, and Dependabot.
+
+This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release.yml). Caller workflows on `main` open and merge release PRs here; merging a release PR creates the Git tag.
 
 ## Adoption
 
 1. Replace inlined workflows in a consumer repo with callers from the doc.
-2. Pin `uses:` to a full commit SHA from this repository.
-3. Let Dependabot bump Action and reusable-workflow SHAs via `ci(deps)` pull requests.
+2. Pin each `uses:` to the **full commit SHA** behind a [release tag](https://github.com/osloer-industries/.github/releases), with a `# v0.x.y` comment (never `# main` or a branch name).
+3. Add Dependabot `github-actions` version updates with the `osloer-reusables` group from the doc so every `osloer-industries/.github` pin bumps in one `ci(deps)` pull request.
