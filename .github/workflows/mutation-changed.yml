@@ -37,11 +37,25 @@ jobs:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Resolve reusables pin from job workflow identity
+        if: github.event_name == 'pull_request'
+        id: reusables-pin
+        run: |
+          set -euo pipefail
+          if [ -z "${JOB_WORKFLOW_SHA}" ]; then
+            echo "::error::JOB_WORKFLOW_SHA is empty — pin uses: to a full commit SHA on osloer-industries/.github"
+            exit 1
+          fi
+          if [ "${JOB_WORKFLOW_REPOSITORY}" != "osloer-industries/.github" ]; then
+            echo "::error::JOB_WORKFLOW_REPOSITORY must be osloer-industries/.github (got ${JOB_WORKFLOW_REPOSITORY})"
+            exit 1
+          fi
+          echo "sha=${JOB_WORKFLOW_SHA}" >>"$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         with:
           repository: osloer-industries/.github
-          ref: ${{ env.JOB_WORKFLOW_SHA }}
+          ref: ${{ steps.reusables-pin.outputs.sha }}
           path: reusables
           sparse-checkout: .github/scripts/run-mutation-changed.ts
           sparse-checkout-cone-mode: true
