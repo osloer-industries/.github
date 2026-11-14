@@ -1,0 +1,41 @@
+name: Reusable — ci-passed gate
+
+on:
+  workflow_call:
+    inputs:
+      needs-json:
+        description: Serialized needs context from the caller ci-passed job (toJSON(needs))
+        type: string
+        required: true
+      job-name:
+        description: Display name for the aggregate status check
+        type: string
+        default: ci-passed
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 5
+
+jobs:
+  ci-passed:
+    name: ${{ inputs.job-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables
+          sparse-checkout: .github/scripts/ci-passed-gate.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Require every upstream job to succeed
+        env:
+          NEEDS_JSON: ${{ inputs.needs-json }}
+        run: node reusables/.github/scripts/ci-passed-gate.ts
