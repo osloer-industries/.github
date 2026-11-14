@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/osloer-industries/.github/compare/v0.1.0...v0.1.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **release-please:** request workflows write on release app tokens ([baa194a](https://github.com/osloer-industries/.github/commit/baa194a49de2e72e9fb485a0bd260fcfdd39a2f7))
+* **release-please:** request workflows write on release app tokens ([1361abd](https://github.com/osloer-industries/.github/commit/1361abd4d5ceb6b9f108459e6021b49a28b08385))
+
 ## 0.1.0 (2026-11-14)
 
 
