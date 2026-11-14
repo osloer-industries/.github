@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       expected-workflow-sha:
-        description: Commit SHA the caller pinned on uses: (must match job.workflow_sha)
+        description: "Commit SHA the caller pinned in uses (must match JOB_WORKFLOW_SHA)."
         type: string
         required: true
       script-relative-path:
@@ -20,30 +20,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Assert job.workflow_sha matches caller pin
+      - name: Assert JOB_WORKFLOW_SHA matches caller pin
         env:
           EXPECTED: ${{ inputs.expected-workflow-sha }}
-          ACTUAL: ${{ job.workflow_sha }}
-          REPOSITORY: ${{ job.workflow_repository }}
+          ACTUAL: ${{ env.JOB_WORKFLOW_SHA }}
+          REPOSITORY: ${{ env.JOB_WORKFLOW_REPOSITORY }}
         run: |
           set -euo pipefail
           if [ -z "$ACTUAL" ]; then
-            echo "::error::job.workflow_sha is empty"
+            echo "::error::JOB_WORKFLOW_SHA is empty"
             exit 1
           fi
           if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::job.workflow_sha ($ACTUAL) must equal the uses: pin ($EXPECTED); do not use github.workflow_sha for org script checkout"
+            echo "::error::JOB_WORKFLOW_SHA ($ACTUAL) must equal the uses pin ($EXPECTED); github.workflow_sha is the caller workflow, not the reusable pin"
             exit 1
           fi
           if [ "$REPOSITORY" != "osloer-industries/.github" ]; then
-            echo "::error::job.workflow_repository ($REPOSITORY) must be osloer-industries/.github"
+            echo "::error::JOB_WORKFLOW_REPOSITORY ($REPOSITORY) must be osloer-industries/.github"
             exit 1
           fi
-          echo "job.workflow_sha matches caller pin ($ACTUAL)"
+          echo "JOB_WORKFLOW_SHA matches caller pin ($ACTUAL)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          repository: osloer-industries/.github
+          ref: ${{ env.JOB_WORKFLOW_SHA }}
           path: reusables
           sparse-checkout: ${{ inputs.script-relative-path }}
           sparse-checkout-cone-mode: true
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f "reusables/${SCRIPT_PATH}" ]; then
-            echo "::error::Missing reusables/${SCRIPT_PATH} at pin ${{ job.workflow_sha }}"
+            echo "::error::Missing reusables/${SCRIPT_PATH} at pin ${JOB_WORKFLOW_SHA}"
             exit 1
           fi
           echo "Found reusables/${SCRIPT_PATH}"

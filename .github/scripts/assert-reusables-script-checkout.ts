@@ -1,6 +1,6 @@
 /**
  * Reusable workflows that sparse-checkout org scripts must resolve the pin via
- * job.workflow_sha / job.workflow_repository (not github.workflow_sha, which is the caller's workflow).
+ * JOB_WORKFLOW_SHA (runner env for job.workflow_sha), not github.workflow_sha.
  */
 import { readFileSync } from "node:fs";
 
@@ -23,19 +23,24 @@ for (const workflowPath of WORKFLOWS) {
   const violations: string[] = [];
 
   if (yaml.includes("reusables-ref")) {
-    violations.push("must not define or reference reusables-ref (use job.workflow_sha)");
+    violations.push("must not define or reference reusables-ref");
   }
   if (yaml.includes("github.workflow_sha")) {
     violations.push("must not use github.workflow_sha for script checkout");
   }
-  if (!yaml.includes("job.workflow_sha")) {
-    violations.push("must checkout vendored scripts with job.workflow_sha");
+  if (yaml.includes("job.workflow_sha") || yaml.includes("job.workflow_repository")) {
+    violations.push(
+      "must use env.JOB_WORKFLOW_SHA in YAML (actionlint 1.7.12 does not model job.workflow_*; runner injects the same values as JOB_* env vars)",
+    );
   }
-  if (!yaml.includes("job.workflow_repository")) {
-    violations.push("must checkout vendored scripts with job.workflow_repository");
+  if (!yaml.includes("env.JOB_WORKFLOW_SHA")) {
+    violations.push("must checkout vendored scripts with env.JOB_WORKFLOW_SHA");
+  }
+  if (!yaml.includes("repository: osloer-industries/.github")) {
+    violations.push("must sparse-checkout from osloer-industries/.github");
   }
   if (/Resolve reusables commit/.test(yaml)) {
-    violations.push("must not resolve reusables ref via a separate shell step (use job context in checkout)");
+    violations.push("must not resolve reusables ref via a separate shell step");
   }
 
   if (violations.length > 0) {
@@ -44,5 +49,5 @@ for (const workflowPath of WORKFLOWS) {
     }
     process.exit(1);
   }
-  console.log(`${workflowPath} uses job.workflow_* for vendored script checkout.`);
+  console.log(`${workflowPath} uses JOB_WORKFLOW_SHA for vendored script checkout.`);
 }

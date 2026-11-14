@@ -27,11 +27,11 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 
 ### SonarCloud zero open issues
 
-SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`JOB_WORKFLOW_SHA`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 ### Mutation (changed src)
 
-Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs Stryker against changed non-test `src/**/*.ts` on pull requests (via [`.github/scripts/run-mutation-changed.ts`](.github/scripts/run-mutation-changed.ts)) and `npm run test:mutation` (configurable) on pushes to the default branch. Callers must define Stryker and the full mutation npm script locally; pin `uses:` to a full commit SHA; the helper is fetched at **`job.workflow_sha`**.
+Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs Stryker against changed non-test `src/**/*.ts` on pull requests (via [`.github/scripts/run-mutation-changed.ts`](.github/scripts/run-mutation-changed.ts)) and `npm run test:mutation` (configurable) on pushes to the default branch. Callers must define Stryker and the full mutation npm script locally; pin `uses:` to a full commit SHA; the helper is fetched at **`JOB_WORKFLOW_SHA`**.
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML and SHA pinning.
 
