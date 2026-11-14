@@ -17,6 +17,13 @@ Shared reusable GitHub Actions workflows and TypeScript CI gates for the org.
 - Stable required check name: job **`SonarCloud zero open issues`**.
 - After editing the script, unit tests run in `ci.yml` (`SonarCloud zero issues unit tests`).
 
+## Mutation (changed src)
+
+- Workflow: `.github/workflows/mutation-changed.yml` (`workflow_call`).
+- Canonical script: `.github/scripts/run-mutation-changed.ts` (sparse checkout at the caller-pinned reusables SHA).
+- Stable default check name: job **`Mutation`** (override with `job-name`).
+- After editing the script, unit tests run in `ci.yml` (`Mutation changed unit tests`).
+
 ## Docs
 
 - README: workflow index.

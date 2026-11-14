@@ -19,6 +19,7 @@ uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
+| `mutation-changed.yml` | Mutation (override with `job-name`) | `pull_request`, `push` to default branch |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 
@@ -36,6 +37,11 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | Workflow | Input | Default | Purpose |
 | --- | --- | --- | --- |
 | `node-npm-quality.yml` | `check-npm-script` | `check` | npm script passed to `npm run` for the quality gate |
+| `node-npm-quality.yml` | `npm-prefixes-json` | `"[]"` | JSON array of extra `--prefix` paths for `npm ci` and `npm audit` (monorepo helpers, e.g. `["packages/eslint-sonarjs"]`) |
+| `node-npm-quality.yml` | `fetch-depth` | `1` | Checkout depth; use `0` when PR jobs run git-based helpers (guardrail notice, changed-path gates) |
+| `node-npm-quality.yml` | `pr-pre-check-script` | *(empty)* | Caller script run with `node` on `pull_request` only; sets `GUARDRAIL_BASE_REF` to the PR base SHA |
+| `mutation-changed.yml` | `full-npm-script` | `test:mutation` | npm script for full `src/` mutation on default-branch `push` |
+| `mutation-changed.yml` | `reusables-ref` | *(empty → `github.workflow_sha`)* | `.github` commit supplying `run-mutation-changed.ts` |
 | `sonarqube-cloud-node.yml` | `coverage-npm-script` | `test:coverage` | npm script that generates coverage before Sonar upload |
 | `sonarcloud-zero-issues.yml` | `project-key` | *(empty → `osloer-industries_<repo>`)* | SonarCloud project key |
 | `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
@@ -106,6 +112,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: codeql-${{ github.workflow }}-${{ github.ref }}
@@ -114,12 +121,17 @@ concurrency:
 jobs:
   analyze:
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA
+    permissions:
+      contents: read
+      actions: read
     with:
       code-scanning-upload: false
       fail-on-sarif-level: error
 ```
 
 Download the `codeql-sarif-*` workflow artifact for the full SARIF when triaging findings.
+
+Default `queries` is `security-and-quality`. Callers that previously inlined `security-extended` should pass `queries: security-extended` only when that broader query suite is documented for the repo (e.g. coast-fire-visualizer migration).
 
 The security gate is **inlined in the reusable workflow** (a `run:` step that writes an embedded TypeScript heredoc to a temp file and runs it with Node 24), so it always executes from the same commit the caller pins—no checkout of this repository and no caller-local action path. The editable source of truth is `.github/scripts/codeql-sarif-security-gate.ts`; CI fails if that file and the inline copy diverge (`node .github/scripts/codeql-gate-inline.ts --check`). After editing the script, run `node .github/scripts/codeql-gate-inline.ts --write` before committing.
 
@@ -147,6 +159,8 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA
 ```
 
+**Do not** replace [lunch-money-de-invest-sync](https://github.com/osloer-industries/lunch-money-de-invest-sync)’s GHAS-free `dependency-diff-audit.mjs` gate with this reusable. **Private** repos (e.g. coast-fire-visualizer): confirm the official dependency review action is available without paid GHAS before adding this caller; otherwise keep a local GHAS-free gate.
+
 ### Release Please
 
 ```yaml
@@ -173,6 +187,8 @@ jobs:
       RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 ```
 
+The reusable job declares `contents: write`, `issues: write`, and `pull-requests: write`. Callers should set the same permissions at workflow level (as above) so Release Please can open and update release pull requests. When policy allows only `GITHUB_TOKEN`, map `RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}` instead of a dedicated secret name.
+
 ### SonarQube Cloud (Node)
 
 ```yaml
@@ -197,6 +213,8 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
+
+The reusable job uses `contents: read` and `pull-requests: read`. When `SONAR_TOKEN` is empty, analysis steps are skipped (covers fork PRs and Dependabot without the secret). Inlined workflows that used `if:` to skip forks can rely on this instead when the token is not passed to untrusted PRs. Repositories with **no** Sonar token (local-only policy) must not adopt this reusable or `sonarcloud-zero-issues.yml`.
 
 ### SonarCloud zero open issues
 
@@ -260,8 +278,38 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA
     with:
       check-npm-script: check
+      fetch-depth: 0
+      pr-pre-check-script: scripts/check-guardrail-changes.ts
       npm-prefixes-json: '["packages/eslint-sonarjs"]'
 ```
+
+`npm-ci-ignore-scripts` defaults to `true` (org standard). Adopt `--ignore-scripts` on fleet migration unless a documented install script must run. Prefer a caller `.nvmrc` over a new `node-version` input; homeexchange-mcp should add `.nvmrc` in its migration PR rather than requiring a parallel version pin input.
+
+### Mutation (Stryker, changed src)
+
+Requires caller `package.json` scripts (`test:mutation` or override), Stryker config, and devDependencies. Check name defaults to **`Mutation`**.
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@REUSABLES_SHA
+```
+
+Pin `uses:` to a **full commit SHA** so `github.workflow_sha` checks out matching `run-mutation-changed.ts`. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
 
 ### Setup smoke (template)
 
