@@ -51,13 +51,22 @@ export function findNeedsFailures(needs: NeedsMap): string[] {
   return failures;
 }
 
+function formatCaughtError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return JSON.stringify(error);
+}
+
 export function runCiPassedGate(needsJson: string): number {
   let needs: NeedsMap;
   try {
     needs = parseNeedsJson(needsJson);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`::error::${message}`);
+    console.error(`::error::${formatCaughtError(error)}`);
     return 1;
   }
 

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 const REUSABLE = ".github/workflows/auto-merge.yml";
 const CALLER = ".github/workflows/auto-merge-caller.yml";
 
-const FULL_SHA = /@[0-9a-f]{40}\s+#\s+v[\d.]+\s*$/;
+const FULL_SHA_RE = /@[0-9a-f]{40}\s+#\s+v[\d.]+\s*$/;
 
 function load(path: string): string {
   try {
@@ -28,6 +28,72 @@ function linesWithUses(yaml: string): { line: number; text: string }[] {
     }
   }
   return out;
+}
+
+function usesLineHasFullShaPin(text: string): boolean {
+  return FULL_SHA_RE.exec(text) !== null;
+}
+
+function usesLineHas40CharSha(text: string): boolean {
+  const at = text.indexOf("@");
+  if (at < 0) {
+    return false;
+  }
+  const sha = text.slice(at + 1, at + 41);
+  if (sha.length !== 40) {
+    return false;
+  }
+  for (const ch of sha) {
+    const code = ch.charCodeAt(0);
+    const isDigit = code >= 48 && code <= 57;
+    const isLowerHex = code >= 97 && code <= 102;
+    if (!isDigit && !isLowerHex) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function scriptCallsGhPrMergeAuto(script: string): boolean {
+  return (
+    script.includes('"pr"') &&
+    script.includes('"merge"') &&
+    script.includes('"--auto"') &&
+    script.includes("gh(")
+  );
+}
+
+function reusableChecksOutCallerPrCode(yaml: string): boolean {
+  const lines = yaml.split("\n");
+  let inCheckoutStep = false;
+  let checkoutPinsOrgReusables = false;
+  let refsPullRequest = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("- uses: actions/checkout@")) {
+      inCheckoutStep = true;
+      checkoutPinsOrgReusables = false;
+      refsPullRequest = false;
+      continue;
+    }
+    if (inCheckoutStep && trimmed.startsWith("- ")) {
+      inCheckoutStep = false;
+    }
+    if (!inCheckoutStep) {
+      continue;
+    }
+    if (trimmed.includes("repository: osloer-industries/.github")) {
+      checkoutPinsOrgReusables = true;
+    }
+    if (trimmed.includes("github.event.pull_request")) {
+      refsPullRequest = true;
+    }
+  }
+  return !checkoutPinsOrgReusables && refsPullRequest;
+}
+
+function hasReadOnlyJobPermissions(yaml: string): boolean {
+  return yaml.includes("contents: read") && yaml.includes("pull-requests: read");
 }
 
 let failed = false;
@@ -65,10 +131,10 @@ for (const { line, text } of linesWithUses(reusable)) {
   if (text.includes("uses: ./")) {
     continue;
   }
-  if (!/@[0-9a-f]{40}/.test(text)) {
+  if (!usesLineHas40CharSha(text)) {
     fail(REUSABLE, `line ${line} uses: must pin a full commit SHA: ${text}`);
   }
-  if (!FULL_SHA.test(text) && text.includes("@")) {
+  if (!usesLineHasFullShaPin(text) && text.includes("@")) {
     fail(REUSABLE, `line ${line} uses: must include # vX.Y.Z comment: ${text}`);
   }
 }
@@ -95,7 +161,7 @@ if (!reusable.includes("gh pr merge") && !reusable.includes("auto-merge.ts")) {
 }
 
 const script = load(".github/scripts/auto-merge.ts");
-if (!/gh\s*\(\s*\[[\s\S]*"pr",\s*"merge"[\s\S]*"--auto"/.test(script)) {
+if (!scriptCallsGhPrMergeAuto(script)) {
   fail(".github/scripts/auto-merge.ts", 'must call gh(["pr", "merge", ..., "--auto", ...]) only');
 }
 
@@ -103,18 +169,11 @@ if (reusable.includes("persist-credentials: true")) {
   fail(REUSABLE, "checkout must not set persist-credentials: true");
 }
 
-if (
-  /uses:\s*actions\/checkout@[^\n]+\n(?:(?!repository:\s*osloer-industries\/\.github)[\s\S])*?(?:ref:\s*\$\{\{\s*github\.event\.pull_request)/m.test(
-    reusable,
-  )
-) {
+if (reusableChecksOutCallerPrCode(reusable)) {
   fail(REUSABLE, "must not checkout pull request code from the caller repository");
 }
 
-const jobPerms = reusable.match(
-  /permissions:\s*\n\s*contents:\s*read\s*\n\s*pull-requests:\s*read/,
-);
-if (!jobPerms) {
+if (!hasReadOnlyJobPermissions(reusable)) {
   fail(REUSABLE, "job permissions must be contents: read and pull-requests: read only");
 }
 

@@ -63,8 +63,21 @@ export function releasePrFilenameAllowed(filename: string): boolean {
   return changelogPathAllowed(filename);
 }
 
-const VERSION_ONLY_LINE =
-  /^[+-]\s*"version"\s*:\s*"[^"]+"\s*,?\s*$|^[+-]\s*"version"\s*:\s*"[^"]+"\s*$/;
+function isVersionOnlyDiffLine(line: string): boolean {
+  if (!line.startsWith("+") && !line.startsWith("-")) {
+    return false;
+  }
+  const trimmed = line.slice(1).trim();
+  if (!trimmed.startsWith('"version"')) {
+    return false;
+  }
+  const colonPos = trimmed.indexOf(":");
+  if (colonPos < 0) {
+    return false;
+  }
+  const valuePart = trimmed.slice(colonPos + 1).trim();
+  return valuePart.startsWith('"') && valuePart.indexOf('"', 1) > 0;
+}
 
 /**
  * True when a unified diff patch (if present) only adds/removes version field lines.
@@ -82,7 +95,7 @@ export function patchTouchesOnlyVersionField(patch: string | undefined): boolean
       continue;
     }
     if (line.startsWith("+") || line.startsWith("-")) {
-      if (!VERSION_ONLY_LINE.test(line)) {
+      if (!isVersionOnlyDiffLine(line)) {
         return false;
       }
     }

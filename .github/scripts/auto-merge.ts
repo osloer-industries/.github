@@ -4,6 +4,7 @@
  * and Release Please release PRs). Ineligible PRs exit 0 with a log line (fail closed).
  */
 
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
@@ -35,6 +36,29 @@ export interface AutoMergeEnv {
 }
 
 const MERGE_METHODS = new Set(["squash", "merge", "rebase"]);
+
+const GH_BIN_CANDIDATES = ["/usr/bin/gh", "/bin/gh"] as const;
+
+function resolveGhBinary(): string {
+  for (const candidate of GH_BIN_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  console.error(
+    "::error::gh CLI not found at /usr/bin/gh or /bin/gh; install GitHub CLI on the runner.",
+  );
+  process.exit(1);
+}
+
+let ghBinaryCache: string | null = null;
+
+function ghBinary(): string {
+  if (ghBinaryCache === null) {
+    ghBinaryCache = resolveGhBinary();
+  }
+  return ghBinaryCache;
+}
 
 function parseBool(value: string | undefined, name: string): boolean {
   const v = (value ?? "").trim().toLowerCase();
@@ -131,7 +155,11 @@ export function gh(
     GH_TOKEN: token,
     GITHUB_REPOSITORY: repository,
   };
-  const result = spawnSync("gh", args, { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
+  const result = spawnSync(ghBinary(), args, {
+    encoding: "utf8",
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   return {
     ok: result.status === 0,
     stdout: result.stdout ?? "",
@@ -153,7 +181,7 @@ export function fetchPullRequestFiles(cfg: AutoMergeEnv): PullRequestFileLike[] 
   try {
     const parsed = JSON.parse(result.stdout) as PullRequestFileLike[];
     if (!Array.isArray(parsed)) {
-      throw new Error("expected array");
+      throw new TypeError("expected array");
     }
     return parsed;
   } catch {

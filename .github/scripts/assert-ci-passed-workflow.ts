@@ -43,7 +43,17 @@ if (reusable.includes("continue-on-error: true")) {
   fail(REUSABLE, "must not use continue-on-error");
 }
 
-if (!/\bci-passed:\s*\n[\s\S]*?\bif:\s*always\(\)/m.test(ci)) {
+function ciPassedJobUsesAlways(ciYaml: string): boolean {
+  const marker = "\n  ci-passed:";
+  const start = ciYaml.indexOf(marker);
+  if (start < 0) {
+    return false;
+  }
+  const block = ciYaml.slice(start, start + 800);
+  return block.includes("if: always()");
+}
+
+if (!ciPassedJobUsesAlways(ci)) {
   fail(CI_WORKFLOW, "ci-passed job must use if: always()");
 }
 
@@ -63,41 +73,79 @@ if (!ci.includes("NEEDS_JSON: ${{ toJSON(needs) }}")) {
 }
 
 function listCiJobIds(ciYaml: string): string[] {
-  const jobsIndex = ciYaml.search(/^jobs:\s*$/m);
-  if (jobsIndex < 0) {
-    return [];
-  }
-  const jobsSection = ciYaml.slice(jobsIndex);
-  const jobIdPattern = /^ {2}([\w][\w-]*):\s*$/gm;
+  const lines = ciYaml.split("\n");
+  let inJobs = false;
   const jobIds: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = jobIdPattern.exec(jobsSection)) !== null) {
-    jobIds.push(match[1] ?? "");
+  const jobIdLine = /^ {2}([\w][\w-]*):\s*$/;
+  for (const line of lines) {
+    if (line === "jobs:") {
+      inJobs = true;
+      continue;
+    }
+    if (!inJobs) {
+      continue;
+    }
+    if (line.length > 0 && !line.startsWith(" ")) {
+      break;
+    }
+    const match = jobIdLine.exec(line);
+    if (match !== null) {
+      jobIds.push(match[1] ?? "");
+    }
   }
   return jobIds;
 }
 
-const jobIds = listCiJobIds(ci);
-
-const ciPassedBlock = ci.match(/\n {2}ci-passed:\s*\n[\s\S]*?(?=\n {2}\w|\n*$)/);
-if (!ciPassedBlock) {
-  fail(CI_WORKFLOW, "missing ci-passed job");
-} else {
-  const needsBlock = ciPassedBlock[0].match(/\n {4}needs:\s*\n((?: {6}- [\w-]+\n)+)/);
-  if (!needsBlock) {
-    fail(CI_WORKFLOW, "ci-passed must declare needs:");
-  } else {
-    const needed = [...needsBlock[1].matchAll(/ {6}- ([\w-]+)/g)].map((m) => m[1] ?? "");
-    const required = jobIds.filter((id) => id !== "ci-passed");
-    for (const jobId of required) {
-      if (!needed.includes(jobId)) {
-        fail(CI_WORKFLOW, `ci-passed needs must include every other job (missing ${jobId})`);
-      }
+function listCiPassedNeeds(ciYaml: string): string[] | null {
+  const lines = ciYaml.split("\n");
+  let inCiPassed = false;
+  let inNeeds = false;
+  const needed: string[] = [];
+  for (const line of lines) {
+    if (line === "  ci-passed:") {
+      inCiPassed = true;
+      continue;
     }
-    for (const jobId of needed) {
-      if (!required.includes(jobId)) {
-        fail(CI_WORKFLOW, `ci-passed needs lists unknown or duplicate job ${jobId}`);
+    if (!inCiPassed) {
+      continue;
+    }
+    if (line.startsWith("  ") && !line.startsWith("    ") && line !== "  ci-passed:") {
+      break;
+    }
+    if (line.trim() === "needs:") {
+      inNeeds = true;
+      continue;
+    }
+    if (!inNeeds) {
+      continue;
+    }
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) {
+      if (line.trim().length > 0 && !line.startsWith("      ")) {
+        break;
       }
+      continue;
+    }
+    needed.push(trimmed.slice(2).trim());
+  }
+  return inCiPassed && inNeeds ? needed : null;
+}
+
+const jobIds = listCiJobIds(ci);
+const needed = listCiPassedNeeds(ci);
+
+if (needed === null) {
+  fail(CI_WORKFLOW, "missing ci-passed job or needs list");
+} else {
+  const required = jobIds.filter((id) => id !== "ci-passed");
+  for (const jobId of required) {
+    if (!needed.includes(jobId)) {
+      fail(CI_WORKFLOW, `ci-passed needs must include every other job (missing ${jobId})`);
+    }
+  }
+  for (const jobId of needed) {
+    if (!required.includes(jobId)) {
+      fail(CI_WORKFLOW, `ci-passed needs lists unknown or duplicate job ${jobId}`);
     }
   }
 }
