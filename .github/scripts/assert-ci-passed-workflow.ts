@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 const REUSABLE = ".github/workflows/ci-passed.yml";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 const GATE_SCRIPT = ".github/scripts/ci-passed-gate.ts";
+const JOB_ID_LINE = /^ {2}([\w][\w-]*):\s*$/;
 
 function load(path: string): string {
   try {
@@ -72,11 +73,18 @@ if (!ci.includes("NEEDS_JSON: ${{ toJSON(needs) }}")) {
   fail(CI_WORKFLOW, "ci-passed must pass toJSON(needs) into NEEDS_JSON");
 }
 
+function extractJobIdFromLine(line: string): string | null {
+  const match = JOB_ID_LINE.exec(line);
+  if (match === null) {
+    return null;
+  }
+  return match[1] ?? null;
+}
+
 function listCiJobIds(ciYaml: string): string[] {
   const lines = ciYaml.split("\n");
   let inJobs = false;
   const jobIds: string[] = [];
-  const jobIdLine = /^ {2}([\w][\w-]*):\s*$/;
   for (const line of lines) {
     if (line === "jobs:") {
       inJobs = true;
@@ -88,28 +96,54 @@ function listCiJobIds(ciYaml: string): string[] {
     if (line.length > 0 && !line.startsWith(" ")) {
       break;
     }
-    const match = jobIdLine.exec(line);
-    if (match !== null) {
-      jobIds.push(match[1] ?? "");
+    const jobId = extractJobIdFromLine(line);
+    if (jobId !== null) {
+      jobIds.push(jobId);
     }
   }
   return jobIds;
 }
 
-function listCiPassedNeeds(ciYaml: string): string[] | null {
-  const lines = ciYaml.split("\n");
+function isCiPassedJobStart(line: string): boolean {
+  return line === "  ci-passed:";
+}
+
+function isSiblingJobBoundary(line: string): boolean {
+  return line.startsWith("  ") && !line.startsWith("    ") && line !== "  ci-passed:";
+}
+
+function parseNeedsEntry(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("- ")) {
+    return null;
+  }
+  return trimmed.slice(2).trim();
+}
+
+function shouldStopNeedsList(line: string, inNeeds: boolean): boolean {
+  if (!inNeeds) {
+    return false;
+  }
+  const trimmed = line.trim();
+  if (trimmed.startsWith("- ")) {
+    return false;
+  }
+  return trimmed.length > 0 && !line.startsWith("      ");
+}
+
+function scanCiPassedNeeds(lines: string[]): { foundJob: boolean; needs: string[] } {
   let inCiPassed = false;
   let inNeeds = false;
   const needed: string[] = [];
   for (const line of lines) {
-    if (line === "  ci-passed:") {
+    if (isCiPassedJobStart(line)) {
       inCiPassed = true;
       continue;
     }
     if (!inCiPassed) {
       continue;
     }
-    if (line.startsWith("  ") && !line.startsWith("    ") && line !== "  ci-passed:") {
+    if (isSiblingJobBoundary(line)) {
       break;
     }
     if (line.trim() === "needs:") {
@@ -119,24 +153,26 @@ function listCiPassedNeeds(ciYaml: string): string[] | null {
     if (!inNeeds) {
       continue;
     }
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("- ")) {
-      if (line.trim().length > 0 && !line.startsWith("      ")) {
-        break;
-      }
-      continue;
+    if (shouldStopNeedsList(line, inNeeds)) {
+      break;
     }
-    needed.push(trimmed.slice(2).trim());
+    const entry = parseNeedsEntry(line);
+    if (entry !== null) {
+      needed.push(entry);
+    }
   }
-  return inCiPassed && inNeeds ? needed : null;
+  return { foundJob: inCiPassed, needs: needed };
 }
 
-const jobIds = listCiJobIds(ci);
-const needed = listCiPassedNeeds(ci);
+function listCiPassedNeeds(ciYaml: string): string[] | null {
+  const { foundJob, needs } = scanCiPassedNeeds(ciYaml.split("\n"));
+  if (!foundJob || needs.length === 0) {
+    return null;
+  }
+  return needs;
+}
 
-if (needed === null) {
-  fail(CI_WORKFLOW, "missing ci-passed job or needs list");
-} else {
+function validateCiPassedNeedsCoverage(jobIds: string[], needed: string[]): void {
   const required = jobIds.filter((id) => id !== "ci-passed");
   for (const jobId of required) {
     if (!needed.includes(jobId)) {
@@ -148,6 +184,15 @@ if (needed === null) {
       fail(CI_WORKFLOW, `ci-passed needs lists unknown or duplicate job ${jobId}`);
     }
   }
+}
+
+const jobIds = listCiJobIds(ci);
+const needed = listCiPassedNeeds(ci);
+
+if (needed === null) {
+  fail(CI_WORKFLOW, "missing ci-passed job or needs list");
+} else {
+  validateCiPassedNeedsCoverage(jobIds, needed);
 }
 
 if (failed) {

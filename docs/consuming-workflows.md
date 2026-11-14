@@ -415,7 +415,9 @@ Rely on org rulesets / branch protection **required status checks** so auto-merg
 
 ### ci-passed (single required check)
 
-Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success` (skipped, cancelled, and failure all fail closed).
+Run quality/tests, workflow-security, CodeQL, SonarCloud, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success` (skipped, cancelled, and failure all fail closed).
+
+**SonarCloud:** `ci-passed` only inspects jobs listed in `needs`. The standalone **SonarCloud Code Analysis** status from the SonarCloud GitHub integration is **not** part of that graph. Call [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) (after `sonarqube-cloud-node.yml` when you use it) and add that job—e.g. `sonar-zero-open-issues`—to `ci-passed` `needs:` so Sonar results and zero-open-issues are enforced before the aggregate check goes green.
 
 **Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required—`ci-passed` already aggregates them. Auto-merge (`auto-merge.yml`) relies on required checks; with only `ci-passed` required, Dependabot and Release Please PRs merge once the full pipeline is green.
 

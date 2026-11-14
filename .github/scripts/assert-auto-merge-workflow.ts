@@ -43,11 +43,9 @@ function usesLineHas40CharSha(text: string): boolean {
   if (sha.length !== 40) {
     return false;
   }
+  const HEX_DIGITS = "0123456789abcdef";
   for (const ch of sha) {
-    const code = ch.charCodeAt(0);
-    const isDigit = code >= 48 && code <= 57;
-    const isLowerHex = code >= 97 && code <= 102;
-    if (!isDigit && !isLowerHex) {
+    if (!HEX_DIGITS.includes(ch)) {
       return false;
     }
   }

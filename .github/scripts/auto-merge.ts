@@ -54,9 +54,7 @@ function resolveGhBinary(): string {
 let ghBinaryCache: string | null = null;
 
 function ghBinary(): string {
-  if (ghBinaryCache === null) {
-    ghBinaryCache = resolveGhBinary();
-  }
+  ghBinaryCache ??= resolveGhBinary();
   return ghBinaryCache;
 }
 
