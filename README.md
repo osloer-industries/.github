@@ -12,7 +12,6 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please (reusable) |
-| [release.yml](.github/workflows/release.yml) | Release Please on `main` (this repo only) |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
@@ -36,7 +35,7 @@ Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs S
 
 See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML, semver tags, and Dependabot.
 
-This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release.yml). On each push to `main`, the release workflow mints an installation token for the **osloer-reviewer** GitHub App (`vars.OSLOER_RELEASE_APP_ID`, `secrets.OSLOER_RELEASE_APP_PRIVATE_KEY`, scoped to this repository only) so Release Please opens release PRs that trigger CI like any other contributor. The app is installed on the **osloer-industries** org with **Contents** and **Pull requests** read and write. A maintainer merges the release PR when checks are green; that merge creates the Git tag (the automatic release step).
+This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release-please.yml) on `push` to `main` (same pattern as workflow-security — no thin caller with `uses: ./`, which zizmor flags). On each push, the job mints an installation token for the **osloer-reviewer** GitHub App (`vars.OSLOER_RELEASE_APP_ID`, repository secret `RELEASE_APP_PRIVATE_KEY` holding the PEM, scoped to this repository only) so Release Please opens release PRs that trigger CI like any other contributor. The app is installed on the **osloer-industries** org with **Contents** and **Pull requests** read and write. A maintainer merges the release PR when checks are green; that merge creates the Git tag (the automatic release step).
 
 ## Adoption
 

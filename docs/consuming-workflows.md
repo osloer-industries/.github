@@ -200,32 +200,11 @@ jobs:
 
 ### Release Please
 
-**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and `secrets.OSLOER_RELEASE_APP_PRIVATE_KEY` on this repository. Install the app on the org with **Contents** and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
+**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM for the app). Install the app on the org with **Contents** and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
 
-```yaml
-name: Release
+This repository does not use a `release.yml` caller with `uses: ./…` (that form passes actionlint but fails zizmor `self-repository`; the `$/…` form fails actionlint and is not valid on GitHub today). Like [`workflow-security.yml`](.github/workflows/workflow-security.yml), [`release-please.yml`](.github/workflows/release-please.yml) also lists `push` to `main` and runs the release job in-repo.
 
-on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-concurrency:
-  group: release-please
-  cancel-in-progress: false
-
-jobs:
-  release-please:
-    uses: $/.github/workflows/release-please.yml
-    secrets:
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.OSLOER_RELEASE_APP_PRIVATE_KEY }}
-    with:
-      release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
-      release-app-owner: osloer-industries
-      release-app-repositories: .github
-```
+**Consumer repos** that live in the same repository as their reusable copy may call with `uses: ./.github/workflows/release-please.yml` (actionlint-valid).
 
 **Other consumer repos** can call the reusable with a PAT or org token in `secrets.RELEASE_TOKEN` (workflow-level `contents: read` is enough when minting an app token inside the reusable; otherwise match token permissions). GitHub App path on a consumer (optional inputs mirror the example above):
 
