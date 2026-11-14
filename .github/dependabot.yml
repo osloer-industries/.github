@@ -12,3 +12,7 @@ updates:
       default-days: 7
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      osloer-reusables:
+        patterns:
+          - "osloer-industries/.github*"

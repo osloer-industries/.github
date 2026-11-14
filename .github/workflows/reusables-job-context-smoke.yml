@@ -1,6 +1,6 @@
 name: Reusable — job workflow context smoke (optional manual)
 
-# Optional manual smoke: call from a consumer with uses: osloer-industries/.github/.github/workflows/reusables-job-context-smoke.yml@<SHA>
+# Optional manual smoke: call from a consumer with uses: osloer-industries/.github/.github/workflows/reusables-job-context-smoke.yml@<SHA> # v0.x.y
 # and with.expected-workflow-sha matching that SHA. Validates job.workflow_sha resolves the reusable pin.
 
 on:

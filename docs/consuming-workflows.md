@@ -2,11 +2,48 @@
 
 Reusable workflows live in this repository under `.github/workflows/`. Call them from any org repository with an immutable commit SHA (update via Dependabot `ci(deps)` pull requests).
 
-Replace `REUSABLES_SHA` with the commit SHA you adopt (see [releases](https://github.com/osloer-industries/.github/releases) once Release Please is enabled, or the merge commit on `main`).
+## Pinning contract
+
+`osloer-industries/.github` publishes semver Git tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) on each release. Consumer repos must pin the **commit SHA** behind a tag, not a branch, and document the release in an end-of-line comment.
+
+```yaml
+uses: osloer-industries/.github/.github/workflows/workflow-security.yml@a1b2c3d4e5f6789012345678901234567890abcd # v0.1.0
+```
+
+| Do | Do not |
+| --- | --- |
+| Full 40-character commit SHA from a [release](https://github.com/osloer-industries/.github/releases) | `@main`, `@master`, or any moving branch |
+| Trailing `# v0.x.y` matching the release tag | `# main` or other branch names in the comment |
+| Bump all org reusables together (see Dependabot below) | Mixed pins on different SHAs across workflows |
+
+Replace `REUSABLES_SHA` and the comment in the examples below with the release you adopt.
 
 ```text
-uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA
+uses: osloer-industries/.github/.github/workflows/<file>.yml@REUSABLES_SHA # v0.x.y
 ```
+
+### Dependabot (consumer repos)
+
+Dependabot `github-actions` version updates bump both marketplace actions and **reusable workflow** `uses:` references, including SHA pins. A `# v0.x.y` comment (as in the example above) lets Dependabot map the pin to a release and open a pull request when a newer tag exists ([changelog](https://github.blog/changelog/2023-03-13-dependabot-updates-support-reusable-workflows-for-github-actions/), [docs](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates)).
+
+Add or merge this into `.github/dependabot.yml`:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      osloer-reusables:
+        patterns:
+          - "osloer-industries/.github*"
+```
+
+The `osloer-reusables` group keeps every `osloer-industries/.github` reusable on the same SHA in a single weekly pull request.
 
 ## Available reusables
 
@@ -70,7 +107,7 @@ permissions:
 
 jobs:
   semantic-title:
-    uses: osloer-industries/.github/.github/workflows/semantic-pull-request.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/semantic-pull-request.yml@REUSABLES_SHA # v0.x.y
 ```
 
 ### CodeQL
@@ -95,7 +132,7 @@ concurrency:
 
 jobs:
   analyze:
-    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA # v0.x.y
 ```
 
 Private repositories without GitHub Advanced Security cannot upload to Code Scanning. Use artifact mode so CodeQL still gates merges on security findings:
@@ -118,7 +155,7 @@ concurrency:
 
 jobs:
   analyze:
-    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA # v0.x.y
     permissions:
       contents: read
       actions: read
@@ -156,38 +193,48 @@ concurrency:
 
 jobs:
   review:
-    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
 **Do not** replace [lunch-money-de-invest-sync](https://github.com/osloer-industries/lunch-money-de-invest-sync)’s GHAS-free `dependency-diff-audit.mjs` gate with this reusable. **Private** repos (e.g. coast-fire-visualizer): confirm the official dependency review action is available without paid GHAS before adding this caller; otherwise keep a local GHAS-free gate.
 
 ### Release Please
 
+**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM for the app). Install the app on the org with **Contents** and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
+
+This repository does not use a `release.yml` caller with `uses: ./…` (that form passes actionlint but fails zizmor `self-repository`; the `$/…` form fails actionlint and is not valid on GitHub today). Like [`workflow-security.yml`](.github/workflows/workflow-security.yml), [`release-please.yml`](.github/workflows/release-please.yml) also lists `push` to `main` and runs the release job in-repo.
+
+**Consumer repos** that live in the same repository as their reusable copy may call with `uses: ./.github/workflows/release-please.yml` (actionlint-valid).
+
+**Other consumer repos** can call the reusable with a PAT or org token in `secrets.RELEASE_TOKEN` (workflow-level `contents: read` is enough when minting an app token inside the reusable; otherwise match token permissions). GitHub App path on a consumer (optional inputs mirror the example above):
+
 ```yaml
-name: Release
+jobs:
+  release-please:
+    uses: osloer-industries/.github/.github/workflows/release-please.yml@REUSABLES_SHA # v0.x.y
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.MY_RELEASE_APP_PRIVATE_KEY }}
+    with:
+      release-app-id: ${{ vars.MY_RELEASE_APP_ID }}
+      release-app-owner: osloer-industries
+      release-app-repositories: my-repo
+```
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+Fallback without a GitHub App (release PRs may not trigger CI):
 
+```yaml
 permissions:
   contents: write
-  issues: write
   pull-requests: write
-
-concurrency:
-  group: release-please
-  cancel-in-progress: false
 
 jobs:
   release-please:
-    uses: osloer-industries/.github/.github/workflows/release-please.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/release-please.yml@REUSABLES_SHA # v0.x.y
     secrets:
-      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The reusable job declares `contents: write`, `issues: write`, and `pull-requests: write`. Callers should set the same permissions at workflow level (as above) so Release Please can open and update release pull requests. When policy allows only `GITHUB_TOKEN`, map `RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}` instead of a dedicated secret name.
+The reusable job uses `permissions: contents: read` when minting an app token with `actions/create-github-app-token`; Release Please uses the installation token or `RELEASE_TOKEN` you supply.
 
 ### SonarQube Cloud (Node)
 
@@ -209,7 +256,7 @@ concurrency:
 
 jobs:
   analyze:
-    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
@@ -239,13 +286,13 @@ concurrency:
 
 jobs:
   analyze:
-    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   zero-open-issues:
     needs: analyze
-    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
@@ -275,7 +322,7 @@ concurrency:
 
 jobs:
   quality:
-    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA # v0.x.y
     with:
       check-npm-script: check
       fetch-depth: 0
@@ -306,7 +353,7 @@ concurrency:
 
 jobs:
   mutation:
-    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@REUSABLES_SHA # v0.x.y
 ```
 
 Pin `uses:` to a **full commit SHA**. The PR path checks out `run-mutation-changed.ts` at **`job.workflow_sha`**. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
@@ -316,7 +363,7 @@ Pin `uses:` to a **full commit SHA**. The PR path checks out `run-mutation-chang
 ```yaml
 jobs:
   setup-smoke:
-    uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA # v0.x.y
 ```
 
 ### Workflow security (actionlint + zizmor)
@@ -349,7 +396,7 @@ concurrency:
 
 jobs:
   workflow-security:
-    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA
+    uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA # v0.x.y
     permissions:
       contents: read
       actions: read
