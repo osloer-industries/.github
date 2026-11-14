@@ -250,7 +250,7 @@ jobs:
 
 Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
 
-Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (that is the caller workflow’s file on the caller repo). No extra inputs are required.
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`JOB_WORKFLOW_SHA`** (runner env for `job.workflow_sha` — the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). No extra inputs are required.
 
 Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 
@@ -307,7 +307,7 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/mutation-changed.yml@REUSABLES_SHA
 ```
 
-Pin `uses:` to a **full commit SHA**. The PR path checks out `run-mutation-changed.ts` at **`job.workflow_sha`**. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
+Pin `uses:` to a **full commit SHA**. The PR path checks out `run-mutation-changed.ts` at **`JOB_WORKFLOW_SHA`**. On pull requests the helper mutates only changed non-test `src/**/*.ts` (skips when none). On `push` to the default branch, runs `npm run` with `full-npm-script` (default `test:mutation`; 80% break threshold lives in caller Stryker config).
 
 ### Setup smoke (template)
 
