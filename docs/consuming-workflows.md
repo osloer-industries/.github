@@ -200,7 +200,7 @@ jobs:
 
 ### Release Please
 
-**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM for the app). Install the app on the org with **Contents** and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
+**osloer-industries/.github (this repo):** use the osloer-reviewer GitHub App so release PRs run CI (PRs created with `GITHUB_TOKEN` do not, and that path needs the “Allow GitHub Actions to create and approve pull requests” setting). Maintain `vars.OSLOER_RELEASE_APP_ID` and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM for the app). Install the app on the org with **Contents**, **Workflows**, and **Pull requests** read and write. A maintainer merges the Release Please PR when checks are green; the merge tags the release.
 
 This repository does not use a `release.yml` caller with `uses: ./…` (that form passes actionlint but fails zizmor `self-repository`; the `$/…` form fails actionlint and is not valid on GitHub today). Like [`workflow-security.yml`](.github/workflows/workflow-security.yml), [`release-please.yml`](.github/workflows/release-please.yml) also lists `push` to `main` and runs the release job in-repo.
 
@@ -225,6 +225,7 @@ Fallback without a GitHub App (release PRs may not trigger CI):
 ```yaml
 permissions:
   contents: write
+  workflows: write
   pull-requests: write
 
 jobs:
@@ -234,7 +235,7 @@ jobs:
       RELEASE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The reusable job uses `permissions: contents: read` when minting an app token with `actions/create-github-app-token`; Release Please uses the installation token or `RELEASE_TOKEN` you supply.
+The reusable job uses `permissions: contents: read` when minting an app token with `actions/create-github-app-token` (`permission-contents`, `permission-pull-requests`, and `permission-workflows` set to `write` on the installation token so Release Please can update refs when `main` touches `.github/workflows`); Release Please uses the installation token or `RELEASE_TOKEN` you supply.
 
 ### SonarQube Cloud (Node)
 
