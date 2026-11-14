@@ -49,10 +49,11 @@ jobs:
       - name: Assert sparse-checkout script exists at pinned SHA
         env:
           SCRIPT_PATH: ${{ inputs.script-relative-path }}
+          PIN_SHA: ${{ job.workflow_sha }}
         run: |
           set -euo pipefail
           if [ ! -f "reusables/${SCRIPT_PATH}" ]; then
-            echo "::error::Missing reusables/${SCRIPT_PATH} at pin ${{ job.workflow_sha }}"
+            echo "::error::Missing reusables/${SCRIPT_PATH} at pin ${PIN_SHA}"
             exit 1
           fi
           echo "Found reusables/${SCRIPT_PATH}"
