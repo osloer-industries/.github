@@ -16,3 +16,6 @@ updates:
       osloer-reusables:
         patterns:
           - "osloer-industries/.github*"
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
