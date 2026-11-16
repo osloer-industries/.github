@@ -417,11 +417,11 @@ Rely on org rulesets / branch protection **required status checks** so auto-merg
 
 ### ci-passed (single required check)
 
-Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success`. Skipped, cancelled, and failed upstream jobs fail closed **except** for jobs listed in the reusable’s `pull-request-only-jobs` input (default **`sonar-zero-open-issues`**): on `push` and other non–`pull_request` events, a **skipped** result for those jobs is allowed when the caller uses `if: github.event_name == 'pull_request'` on that upstream job. On `pull_request`, skipped/cancelled/missing/failure for pull-request-only jobs still fails **`ci-passed`**. Any other job skipped on `push` still fails **`ci-passed`**.
+Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success`. Skipped, cancelled, and failed upstream jobs fail closed **except** for the Sonar zero-issues caller job (reusable input **`sonar-zero-issues-job`**, default **`sonar-zero-open-issues`**): on `push` and other non–`pull_request` events, a **skipped** result for **only that job** is allowed when the caller uses `if: github.event_name == 'pull_request'` on it. On `pull_request`, skipped/cancelled/missing/failure for that job still fails **`ci-passed`**. Any other job skipped on `push` still fails **`ci-passed`**.
 
 **Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required—`ci-passed` already aggregates them. Auto-merge (`auto-merge.yml`) relies on required checks; with only `ci-passed` required, Dependabot and Release Please PRs merge once the full pipeline is green.
 
-**Reusable inputs:** `needs-json` (required), `pull-request-only-jobs` (comma-separated caller `needs` job ids; default `sonar-zero-open-issues`). Add extra PR-only jobs (e.g. `harness-approval`) by extending the list; only listed ids may be skipped off–`pull_request`.
+**Reusable inputs:** `needs-json` (required), `sonar-zero-issues-job` (single caller `needs` job id for Sonar zero-issues; default `sonar-zero-open-issues`; use only to rename that job, not to register other PR-only jobs).
 
 ```yaml
 name: CI
@@ -473,7 +473,6 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/ci-passed.yml@REUSABLES_SHA # v0.x.y
     with:
       needs-json: ${{ toJSON(needs) }}
-      pull-request-only-jobs: sonar-zero-open-issues
 ```
 
 This repository’s [`ci.yml`](.github/workflows/ci.yml) ends with an **inlined** `ci-passed` job (same `ci-passed-gate.ts` logic as the reusable). [`workflow-security.yml`](.github/workflows/workflow-security.yml) still runs on the same events via its own `pull_request` / `push` trigger until actionlint accepts GitHub’s `$/` same-repository `uses:` form and callers can drop `./` without zizmor `self-repository` findings. **Consumer repositories** should run workflow-security inside the main CI workflow and list it under `ci-passed` `needs:` as in the example above; org rulesets should require only **`ci-passed`** there.

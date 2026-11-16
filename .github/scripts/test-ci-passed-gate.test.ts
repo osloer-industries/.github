@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   findNeedsFailures,
   parseNeedsJson,
-  parsePullRequestOnlyJobIds,
+  parseSonarZeroIssuesJobId,
   runCiPassedGate,
 } from "./ci-passed-gate.ts";
 
@@ -53,19 +53,44 @@ test("does not allow arbitrary jobs skipped on push", () => {
   assert.deepEqual(findNeedsFailures({ quality: { result: "skipped" } }, "push"), [
     "quality: skipped",
   ]);
-});
-
-test("custom pull-request-only-jobs via parsePullRequestOnlyJobIds", () => {
-  const custom = parsePullRequestOnlyJobIds("harness-approval,sonar-zero-open-issues");
-  const needs = { "harness-approval": { result: "skipped" }, lint: { result: "success" } };
-  assert.deepEqual(findNeedsFailures(needs, "push", custom), []);
-  assert.deepEqual(findNeedsFailures(needs, "pull_request", custom), ["harness-approval: skipped"]);
-  assert.deepEqual(findNeedsFailures({ other: { result: "skipped" } }, "push", custom), [
-    "other: skipped",
+  assert.deepEqual(findNeedsFailures({ "harness-approval": { result: "skipped" } }, "push"), [
+    "harness-approval: skipped",
   ]);
 });
 
-test("requires GITHUB_EVENT_NAME to allow pull-request-only skips", () => {
+test("parseSonarZeroIssuesJobId rejects multiple job ids", () => {
+  assert.throws(
+    () => parseSonarZeroIssuesJobId("sonar-zero-open-issues,harness-approval"),
+    /comma/i,
+  );
+  assert.throws(
+    () => parseSonarZeroIssuesJobId("a,b"),
+    /single job id/,
+  );
+  assert.equal(parseSonarZeroIssuesJobId("custom-sonar-gate"), "custom-sonar-gate");
+  assert.equal(parseSonarZeroIssuesJobId(undefined), "sonar-zero-open-issues");
+});
+
+test("renamed sonar job id may skip on push only for that id", () => {
+  const needs = { "custom-sonar-gate": { result: "skipped" }, quality: { result: "success" } };
+  assert.deepEqual(findNeedsFailures(needs, "push", "custom-sonar-gate"), []);
+  assert.deepEqual(findNeedsFailures(needs, "push", "sonar-zero-open-issues"), [
+    "custom-sonar-gate: skipped",
+  ]);
+});
+
+test("runCiPassedGate rejects comma-separated SONAR_ZERO_ISSUES_JOB", () => {
+  assert.equal(
+    runCiPassedGate(
+      JSON.stringify({ a: { result: "success" } }),
+      "push",
+      "sonar-zero-open-issues,other",
+    ),
+    1,
+  );
+});
+
+test("requires GITHUB_EVENT_NAME to allow Sonar skip off pull_request", () => {
   assert.deepEqual(findNeedsFailures({ "sonar-zero-open-issues": { result: "skipped" } }), [
     "sonar-zero-open-issues: skipped",
   ]);
