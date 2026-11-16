@@ -124,7 +124,7 @@ jobs:
           set -euo pipefail
           tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
-          curl -fsSL "$url" -o "$tarball"
+          curl -fsSL --proto '=https' --tlsv1.2 --proto-redir '=https' "$url" -o "$tarball"
           echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum -c -
           tar xzf "$tarball"
           mkdir -p "${HOME}/.local/bin"
