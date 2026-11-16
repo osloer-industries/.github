@@ -132,6 +132,8 @@ jobs:
 
 Omit `package-manager` (or set `npm`) to keep existing npm behavior unchanged.
 
+This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit; same-repo `uses:`/`@{{ github.sha }}` fail actionlint/zizmor).
+
 ## Caller examples
 
 ### Semantic pull request title
