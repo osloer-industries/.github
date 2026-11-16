@@ -1,0 +1,13 @@
+{
+  "noInlineConfig": true,
+  "config": ".markdownlint-org-block.json",
+  "ignores": ["**/node_modules/**"],
+  "overrides": [
+    {
+      "files": ["agents-org-workflow-block.md"],
+      "config": {
+        "MD041": false
+      }
+    }
+  ]
+}

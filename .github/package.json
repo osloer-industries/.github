@@ -8,7 +8,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.agents-md-gate.json",
     "lint:ox": "oxlint -c .oxlintrc.json scripts",
-    "lint:md:config": "markdownlint-cli2 --config .markdownlint-cli2.jsonc agents-org-workflow-block.md",
+    "lint:md:config": "node --experimental-strip-types scripts/lint-org-workflow-block-md.ts",
     "check": "npm run lint:ox && npm run typecheck"
   },
   "devDependencies": {

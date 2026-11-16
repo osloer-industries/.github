@@ -125,6 +125,8 @@ test("findingsForForbiddenAgentFiles flags tracked CLAUDE.md", () => {
       join(repo, "AGENTS.md"),
     );
     execFileSync("git", ["init"], { cwd: repo });
+    execFileSync("git", ["config", "user.email", "agents-md-lint@test.invalid"], { cwd: repo });
+    execFileSync("git", ["config", "user.name", "agents-md-lint"], { cwd: repo });
     execFileSync("git", ["add", "."], { cwd: repo });
     execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repo });
     const findings = findingsForForbiddenAgentFiles(repo);

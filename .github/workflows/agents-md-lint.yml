@@ -61,7 +61,7 @@ jobs:
         run: npm ci --ignore-scripts
       - name: markdownlint (shared org config, isolated target)
         env:
-          AGENTS_MD_PATH: ${{ inputs.agents-path }}
+          AGENTS_MD_PATH: ${{ github.workspace }}/${{ inputs.agents-path }}
           RUNNER_TEMP: ${{ runner.temp }}
         run: |
           set -euo pipefail

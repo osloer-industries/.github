@@ -323,7 +323,7 @@ jobs:
 
   agents-md-lint-reusable-self:
     name: AGENTS.md lint
-    uses: ./.github/workflows/agents-md-lint.yml
+    uses: $/.github/workflows/agents-md-lint.yml
 
   mutation-changed-unit:
     name: Mutation changed unit tests
