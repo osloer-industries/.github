@@ -421,9 +421,9 @@ jobs:
 
 ### AGENTS.md lint (opt-in fleet desloppify)
 
-Deterministic checks on `AGENTS.md`: shared markdownlint config, line/word budget, banned filler phrases and emoji, cited `npm run` / `bun run` scripts, backtick repo paths, sole required check naming (`ci-passed`), verbatim org **Agent workflow** block from `osloer-industries/.github`, and absence of `CLAUDE.md`. No LLM calls.
+Deterministic checks on `AGENTS.md`: shared markdownlint config (no inline disables; target linted from `$RUNNER_TEMP`), line/word budget, filler warnings and emoji errors, cited package scripts, backtick repo paths, versioned org **Agent workflow** block (markers + whitespace-normalised body), and tracked forbidden instruction files (`git ls-files` denylist). No LLM calls.
 
-**Caller setup:** copy the **Agent workflow** section from `.github/agents-org-workflow-block.md` at the reusables pin into the repository root `AGENTS.md` after adopting the release. Keep it identical to the org canonical file at that pin.
+**Caller setup:** embed the marked region from `.github/agents-org-workflow-block.md` at the reusables pin into the repository root `AGENTS.md`, including `org-agent-workflow` start/end markers and matching version. Adopt the reusable only together with per-repo fixes so the first run is green (no fleet repo passes at current pins without reconciling block, paths, and scripts).
 
 | Input | Default | Purpose |
 | --- | --- | --- |
@@ -445,7 +445,7 @@ jobs:
     # …
 ```
 
-Set `require-org-workflow-block: false` only when migrating before the org block is copied (temporary; prefer blocking merge until the block is present).
+When a reusables pin bumps the block version, update the marked region (and marker version) in `AGENTS.md`; the gate prints a unified diff on drift. Pair Dependabot org-reusables bumps with that sync in the same PR.
 
 ### Auto-merge (Dependabot and Release Please)
 

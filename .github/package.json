@@ -1,0 +1,20 @@
+{
+  "name": "@osloer-industries/dot-github-tooling",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.agents-md-gate.json",
+    "lint:ox": "oxlint -c .oxlintrc.json scripts",
+    "lint:md:config": "markdownlint-cli2 --config .markdownlint-cli2.jsonc agents-org-workflow-block.md",
+    "check": "npm run lint:ox && npm run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "markdownlint-cli2": "0.24.1",
+    "oxlint": "1.24.0",
+    "typescript": "5.9.3"
+  }
+}
