@@ -44,6 +44,7 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Canonical script: `.github/scripts/ci-passed-gate.ts` (sparse checkout at `job.workflow_sha`).
 - Stable required check name: **`ci-passed`** (override with `job-name` input).
 - Caller job must use `if: always()` and pass `needs-json: ${{ toJSON(needs) }}` listing **every** upstream CI job (including Workflow security, CodeQL, and SonarCloud zero open issues).
+- Org standard: list the Sonar zero-issues caller job in `ci-passed` `needs:`; give that job `if: github.event_name == 'pull_request'`. The gate allows **only** jobs in `pull-request-only-jobs` (default `sonar-zero-open-issues`) to be **skipped** on non–`pull_request` events; on `pull_request`, skipped/cancelled/missing/failure for those jobs still fails `ci-passed`.
 - Contract: `.github/scripts/assert-ci-passed-workflow.ts`; tests in `ci.yml` (`Auto-merge unit tests` / workflow-security contract job).
 
 ## Auto-merge (low-risk PRs)
