@@ -28,6 +28,3 @@ paths:
   .github/workflows/agents-md-lint.yml:
     ignore:
       - 'property "workflow_sha" is not defined in object type'
-  .github/workflows/ci.yml:
-    ignore:
-      - 'could not find callable workflow'

@@ -46,6 +46,7 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 ## Reusable workflow maintenance (this repository)
 
+- Like `workflow-security.yml`, `agents-md-lint.yml` also lists `pull_request` / `push` to `main` so this repository exercises the reusable without a same-repo `uses: ./…` caller in `ci.yml`.
 - Cross-repo reusable workflows **inline** large TypeScript gates where checkout is unsafe (`.github/scripts/codeql-gate-inline.ts`, `.github/scripts/zizmor-thresholds-inline.ts`). Workflows that sparse-checkout org scripts (`.github/workflows/sonarcloud-zero-issues.yml`, `.github/workflows/mutation-changed.yml`, `.github/workflows/ci-passed.yml`, `.github/workflows/auto-merge.yml`, `.github/workflows/agents-md-lint.yml`) must checkout at **`${{ job.workflow_sha }}`** (the commit in the caller’s `uses:` pin; not `github.workflow_sha`, which is the caller workflow). CI enforces via `.github/scripts/assert-reusables-script-checkout.ts`; optional manual smoke via `.github/workflows/reusables-job-context-smoke.yml`.
 - Canonical org Agent workflow block for fleet drift checks: `.github/agents-org-workflow-block.md` (markers + body; gate compares whitespace-normalised content and marker version).
 - Consumer repositories under **osloer-industries** should embed the block from `.github/agents-org-workflow-block.md` at their reusables pin (marker version must match the pin’s block file).
