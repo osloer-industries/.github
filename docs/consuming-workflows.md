@@ -45,6 +45,10 @@ updates:
 
 The `osloer-reusables` group keeps every `osloer-industries/.github` reusable on the same SHA in a single weekly pull request.
 
+## Cloud Agents and CI
+
+Org **AGENTS.md** (in this repository and copied into consumer repos) requires Cloud Agents to **subscribe to GitHub CI on the PR head branch** after each push, then end the turn and react to failure notifications—**not** poll Actions in the shell. Propagate the **Agent workflow** section from [`AGENTS.md`](../AGENTS.md) when adopting reusables in a new repository.
+
 ## Available reusables
 
 | Workflow file | Check name(s) | Caller triggers |
