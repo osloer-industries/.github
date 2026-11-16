@@ -138,7 +138,7 @@ function collectFindings(
   const errors: string[] = [];
   const paths = globSync("**/*.sarif", { cwd: sarifDir, recursive: true })
     .map((relative) => join(sarifDir, relative))
-    .sort();
+    .toSorted();
   if (paths.length === 0) {
     errors.push(`No SARIF files found under ${sarifDir}`);
     return { findings, errors };

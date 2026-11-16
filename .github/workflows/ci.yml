@@ -59,6 +59,29 @@ jobs:
       - name: Assert Release Please app tokens request required permissions
         run: node --experimental-strip-types .github/scripts/assert-release-please-app-token-permissions.ts
 
+  dot-github-tooling:
+    name: dot-github tooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: .github/package-lock.json
+      - name: Typecheck and lint org scripts
+        working-directory: .github
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run check
+          npm run lint:md:config
+
   sonarcloud-zero-issues-unit:
     name: SonarCloud zero issues unit tests
     runs-on: ubuntu-latest
@@ -282,6 +305,22 @@ jobs:
           pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
           "$runner" "$pm" run
 
+  agents-md-lint-unit:
+    name: AGENTS.md lint unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Run AGENTS.md lint unit tests
+        run: node --experimental-strip-types --test .github/scripts/test-agents-md-lint.test.ts
+
   mutation-changed-unit:
     name: Mutation changed unit tests
     runs-on: ubuntu-latest
@@ -385,6 +424,8 @@ jobs:
       - package-manager-unit
       - package-manager-reusable-quality-smoke
       - package-manager-reusable-setup-smoke
+      - dot-github-tooling
+      - agents-md-lint-unit
       - mutation-changed-unit
       - zizmor-fail-closed-self-test
     if: always()

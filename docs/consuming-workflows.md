@@ -65,6 +65,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 | `auto-merge.yml` | Auto-merge (optional; osloer-reviewer) | `pull_request` (types: opened, synchronize, reopened, ready_for_review) |
 | `ci-passed.yml` | Aggregate required check | Called as the final job in the main CI workflow |
+| `agents-md-lint.yml` | AGENTS.md lint (override with `job-name`) | `pull_request`, `push` to default branch |
 
 ### Reusable workflow inputs (workflow security)
 
@@ -96,6 +97,8 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
 | `sonarcloud-zero-issues.yml` | `timeout-minutes` | `20` | Max wait for PR analysis at head SHA |
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
+| `sonarcloud-zero-issues.yml` | `issues-settle-polls` | `3` | Consecutive matching open-issue API pages before enforcing zero issues |
+| `sonarcloud-zero-issues.yml` | `issues-min-polls` | `3` | Minimum issue API polls before a stable empty snapshot can pass |
 | `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
 | `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
@@ -417,6 +420,34 @@ jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA # v0.x.y
 ```
+
+### AGENTS.md lint (opt-in fleet desloppify)
+
+Deterministic checks on `AGENTS.md`: shared markdownlint config (no inline disables; target linted from `$RUNNER_TEMP`), line/word budget, filler warnings and emoji errors, cited package scripts, backtick repo paths, versioned org **Agent workflow** block (markers + whitespace-normalised body), and tracked forbidden instruction files (`git ls-files` denylist). No LLM calls.
+
+**Caller setup:** embed the marked region from `.github/agents-org-workflow-block.md` at the reusables pin into the repository root `AGENTS.md`, including `org-agent-workflow` start/end markers and matching version. Adopt the reusable only together with per-repo fixes so the first run is green (no fleet repo passes at current pins without reconciling block, paths, and scripts).
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `agents-path` | `AGENTS.md` | Path to agent instructions |
+| `job-name` | `AGENTS.md lint` | Check name |
+| `require-org-workflow-block` | `true` | Enforce embedded org block |
+| `max-lines` | `220` | Line budget |
+| `max-words` | `3500` | Word budget |
+
+```yaml
+jobs:
+  agents-md-lint:
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@REUSABLES_SHA # v0.x.y
+
+  ci-passed:
+    needs:
+      # …other jobs…
+      - agents-md-lint
+    # …
+```
+
+When a reusables pin bumps the block version, update the marked region (and marker version) in `AGENTS.md`; the gate prints a unified diff on drift. Pair Dependabot org-reusables bumps with that sync in the same PR.
 
 ### Auto-merge (Dependabot and Release Please)
 

@@ -19,6 +19,14 @@ on:
         description: Seconds between SonarCloud API polls while waiting for analysis
         type: number
         default: 10
+      issues-settle-polls:
+        description: Consecutive matching open-issue API results required before enforcing zero issues
+        type: number
+        default: 3
+      issues-min-polls:
+        description: Minimum open-issue API polls before a stable result can pass (avoids post-analysis index lag)
+        type: number
+        default: 3
     secrets:
       SONAR_TOKEN:
         description: SonarCloud user token with permission to read issues for the project
@@ -50,6 +58,8 @@ jobs:
           SONAR_ORGANIZATION: ${{ inputs.organization }}
           SONAR_WAIT_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
           SONAR_POLL_INTERVAL_SECONDS: ${{ inputs.poll-interval-seconds }}
+          SONAR_ISSUES_SETTLE_POLLS: ${{ inputs.issues-settle-polls }}
+          SONAR_ISSUES_MIN_POLLS: ${{ inputs.issues-min-polls }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}

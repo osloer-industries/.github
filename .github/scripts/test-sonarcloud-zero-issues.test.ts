@@ -5,6 +5,8 @@ import { test } from "node:test";
 import {
   analysisMatchesHead,
   fetchOpenIssues,
+  fetchOpenIssuesWhenSettled,
+  hasInProgressCeForPullRequest,
   parseConfigFromEnv,
   resolveProjectKey,
   runSonarZeroIssuesGate,
@@ -32,6 +34,8 @@ function baseConfig(overrides: Partial<SonarConfig> = {}): SonarConfig {
     startedAtMs: now,
     deadlineMs: now + 60_000,
     organization: "osloer-industries",
+    issuesSettlePolls: 2,
+    issuesMinPollsBeforeSettle: 3,
     ...overrides,
   };
 }
@@ -85,6 +89,59 @@ test("parseConfigFromEnv rejects non pull_request events", () => {
     }),
   );
   assert.equal(exitCode, 1);
+});
+
+test("hasInProgressCeForPullRequest detects pending tasks", () => {
+  assert.equal(
+    hasInProgressCeForPullRequest(
+      [{ pullRequest: "17", status: "IN_PROGRESS" }],
+      17,
+    ),
+    true,
+  );
+  assert.equal(
+    hasInProgressCeForPullRequest([{ pullRequest: "17", status: "SUCCESS" }], 17),
+    false,
+  );
+});
+
+test("waitForPullRequestAnalysis waits when compute engine is still running", async () => {
+  const config = baseConfig();
+  let listCalls = 0;
+  const fetchImpl: FetchLike = async (input) => {
+    const url = String(input);
+    if (url.includes("/api/project_pull_requests/list")) {
+      listCalls += 1;
+      return jsonResponse({
+        pullRequests: [
+          {
+            key: "17",
+            analysisDate: "2026-11-12T10:00:00+0000",
+            commit: { sha: config.headSha },
+          },
+        ],
+      });
+    }
+    if (url.includes("/api/ce/activity")) {
+      if (listCalls < 2) {
+        return jsonResponse({
+          tasks: [{ pullRequest: "17", status: "IN_PROGRESS" }],
+        });
+      }
+      return jsonResponse({ tasks: [{ pullRequest: "17", status: "SUCCESS" }] });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  let tick = 0;
+  const result = await waitForPullRequestAnalysis(config, fetchImpl, {
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => config.startedAtMs + tick * 2,
+  });
+  assert.equal(result.key, "17");
+  assert.equal(listCalls >= 2, true);
 });
 
 test("waitForPullRequestAnalysis succeeds when commit sha matches", async () => {
@@ -197,8 +254,46 @@ test("fetchOpenIssues paginates until all issues are collected", async () => {
   assert.equal(issues.length, 3);
 });
 
+test("fetchOpenIssuesWhenSettled keeps polling when the issue index grows", async () => {
+  const config = baseConfig({ deadlineMs: Date.now() + 60_000 });
+  let issueCalls = 0;
+  const fetchImpl: FetchLike = async (input) => {
+    const url = String(input);
+    if (!url.includes("/api/issues/search")) {
+      throw new Error(`unexpected ${url}`);
+    }
+    issueCalls += 1;
+    if (issueCalls < 3) {
+      return jsonResponse({ total: 0, issues: [] });
+    }
+    return jsonResponse({
+      total: 1,
+      issues: [
+        {
+          key: "issue-1",
+          rule: "typescript:S1",
+          severity: "MAJOR",
+          component: `${config.projectKey}:a.ts`,
+          line: 1,
+          message: "one",
+        },
+      ],
+    });
+  };
+
+  let tick = 0;
+  const issues = await fetchOpenIssuesWhenSettled(config, fetchImpl, {
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => config.startedAtMs + tick * 2,
+  });
+  assert.equal(issues.length, 1);
+  assert.equal(issueCalls >= 4, true);
+});
+
 test("runSonarZeroIssuesGate passes with zero open issues", async () => {
-  const config = baseConfig();
+  const config = baseConfig({ deadlineMs: Date.now() + 60_000 });
   const fetchImpl: FetchLike = async (input) => {
     const url = String(input);
     if (url.includes("/api/project_pull_requests/list")) {
@@ -217,15 +312,18 @@ test("runSonarZeroIssuesGate passes with zero open issues", async () => {
     throw new Error(`unexpected ${url}`);
   };
 
+  let tick = 0;
   const code = await runSonarZeroIssuesGate(config, fetchImpl, {
-    sleep: async () => undefined,
-    now: () => config.startedAtMs,
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => config.startedAtMs + tick * 2,
   });
   assert.equal(code, 0);
 });
 
 test("runSonarZeroIssuesGate fails when issues remain", async () => {
-  const config = baseConfig();
+  const config = baseConfig({ deadlineMs: Date.now() + 60_000 });
   const fetchImpl: FetchLike = async (input) => {
     const url = String(input);
     if (url.includes("/api/project_pull_requests/list")) {
@@ -255,9 +353,14 @@ test("runSonarZeroIssuesGate fails when issues remain", async () => {
     throw new Error(`unexpected ${url}`);
   };
 
+  let tick = 0;
   const code = await runSonarZeroIssuesGate(config, fetchImpl, {
-    sleep: async () => undefined,
-    now: () => config.startedAtMs,
+    minPollsBeforeSettle: 1,
+    settlePolls: 1,
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => config.startedAtMs + tick * 2,
   });
   assert.equal(code, 1);
 });

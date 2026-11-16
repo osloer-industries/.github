@@ -1,0 +1,89 @@
+name: Reusable — AGENTS.md lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      agents-path:
+        description: Relative path to the agent instructions file (default AGENTS.md at repo root)
+        type: string
+        default: AGENTS.md
+      job-name:
+        description: GitHub check name shown for this job
+        type: string
+        default: AGENTS.md lint
+      require-org-workflow-block:
+        description: Require the org-wide Agent workflow block from osloer-industries/.github
+        type: boolean
+        default: true
+      max-lines:
+        description: Maximum lines allowed in AGENTS.md
+        type: number
+        default: 220
+      max-words:
+        description: Maximum words allowed in AGENTS.md
+        type: number
+        default: 3500
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 5
+
+concurrency:
+  group: agents-md-lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agents-md-lint:
+    name: ${{ inputs.job-name || 'AGENTS.md lint' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes || 5 }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha || github.sha }}
+          path: reusables
+          sparse-checkout: |
+            .github/scripts
+            .github/agents-org-workflow-block.md
+            .github/package.json
+            .github/package-lock.json
+            .github/.markdownlint.json
+            .github/.markdownlint-cli2.jsonc
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Install org markdownlint tooling
+        working-directory: reusables/.github
+        run: npm ci --ignore-scripts
+      - name: markdownlint (shared org config, isolated target)
+        env:
+          AGENTS_MD_PATH: ${{ github.workspace }}/${{ inputs.agents-path || 'AGENTS.md' }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          target="${RUNNER_TEMP}/agents-md-lint-target.md"
+          cp "${AGENTS_MD_PATH}" "${target}"
+          ./node_modules/.bin/markdownlint-cli2 \
+            --config .markdownlint-cli2.jsonc \
+            "${target}"
+        working-directory: reusables/.github
+      - name: AGENTS.md desloppify gate
+        env:
+          AGENTS_MD_REPO_ROOT: ${{ github.workspace }}
+          AGENTS_MD_PATH: ${{ inputs.agents-path || 'AGENTS.md' }}
+          AGENTS_MD_ORG_BLOCK_PATH: reusables/.github/agents-org-workflow-block.md
+          AGENTS_MD_REQUIRE_ORG_BLOCK: ${{ inputs.require-org-workflow-block != false }}
+          AGENTS_MD_MAX_LINES: ${{ inputs.max-lines || 220 }}
+          AGENTS_MD_MAX_WORDS: ${{ inputs.max-words || 3500 }}
+        run: node reusables/.github/scripts/agents-md-lint.ts
