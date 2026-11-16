@@ -15,6 +15,13 @@ on:
         description: Job timeout
         type: number
         default: 5
+      pull-request-only-jobs:
+        description: >
+          Comma-separated caller `needs` job ids that run only on pull_request (set job-level
+          `if: github.event_name == 'pull_request'`). Their `skipped` result is allowed on other
+          events only (push, schedule, etc.); never on pull_request.
+        type: string
+        default: sonar-zero-open-issues
 
 jobs:
   ci-passed:
@@ -38,4 +45,6 @@ jobs:
       - name: Require every upstream job to succeed
         env:
           NEEDS_JSON: ${{ inputs.needs-json }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_ONLY_NEED_JOBS: ${{ inputs.pull-request-only-jobs }}
         run: node reusables/.github/scripts/ci-passed-gate.ts

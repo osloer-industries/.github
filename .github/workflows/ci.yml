@@ -234,4 +234,5 @@ jobs:
       - name: Require every upstream job to succeed
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: node .github/scripts/ci-passed-gate.ts

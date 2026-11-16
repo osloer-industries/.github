@@ -39,6 +39,22 @@ if (!script.includes("ALLOWED_NEEDS_RESULTS")) {
   fail(GATE_SCRIPT, "must fail closed with an explicit success-only allowlist");
 }
 
+if (!reusable.includes("GITHUB_EVENT_NAME")) {
+  fail(REUSABLE, "must pass GITHUB_EVENT_NAME into the gate step");
+}
+
+if (!reusable.includes("pull-request-only-jobs")) {
+  fail(REUSABLE, "must accept pull-request-only-jobs input for PR-only upstream jobs");
+}
+
+if (!reusable.includes("PULL_REQUEST_ONLY_NEED_JOBS")) {
+  fail(REUSABLE, "must pass pull-request-only-jobs into PULL_REQUEST_ONLY_NEED_JOBS");
+}
+
+if (!script.includes("parsePullRequestOnlyJobIds")) {
+  fail(GATE_SCRIPT, "must parse pull-request-only job allowlist for skip tolerance");
+}
+
 if (reusable.includes("continue-on-error: true")) {
   fail(REUSABLE, "must not use continue-on-error");
 }
@@ -70,6 +86,10 @@ if (!hasReusableCiPassed && !hasInlineCiPassed) {
 
 if (!ci.includes("NEEDS_JSON: ${{ toJSON(needs) }}")) {
   fail(CI_WORKFLOW, "ci-passed must pass toJSON(needs) into NEEDS_JSON");
+}
+
+if (hasInlineCiPassed && !ci.includes("GITHUB_EVENT_NAME: ${{ github.event_name }}")) {
+  fail(CI_WORKFLOW, "inlined ci-passed must pass GITHUB_EVENT_NAME into the gate step");
 }
 
 function listCiJobIds(ciYaml: string): string[] {
