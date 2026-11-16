@@ -47,6 +47,10 @@ on:
         description: Optional script path under the caller repo run with node on pull_request only (e.g. scripts/check-guardrail-changes.ts)
         type: string
         default: ""
+      project-root:
+        description: Optional subdirectory under the caller repo for install, audit, and run (empty = repository root)
+        type: string
+        default: ""
 
 jobs:
   quality:
@@ -61,10 +65,16 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ inputs.fetch-depth }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: inputs.package-manager == 'npm'
+        if: inputs.package-manager == 'npm' && inputs.project-root == ''
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.package-manager == 'npm' && inputs.project-root != ''
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0}/package-lock.json', inputs.project-root) }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         if: inputs.package-manager == 'bun'
         with:
@@ -82,6 +92,7 @@ jobs:
           PACKAGE_MANAGER: ${{ inputs.package-manager }}
           NPM_CI_IGNORE_SCRIPTS: ${{ inputs.npm-ci-ignore-scripts }}
           NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
+          WORKING_DIRECTORY: ${{ inputs.project-root }}
         run: |
           set -euo pipefail
           runner="node"
@@ -102,6 +113,7 @@ jobs:
           PACKAGE_MANAGER: ${{ inputs.package-manager }}
           NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
           AUDIT_LEVEL: ${{ inputs.audit-level }}
+          WORKING_DIRECTORY: ${{ inputs.project-root }}
         run: |
           set -euo pipefail
           runner="node"
@@ -114,6 +126,7 @@ jobs:
         env:
           PACKAGE_MANAGER: ${{ inputs.package-manager }}
           NPM_SCRIPT: ${{ inputs.check-npm-script }}
+          WORKING_DIRECTORY: ${{ inputs.project-root }}
         run: |
           set -euo pipefail
           runner="node"

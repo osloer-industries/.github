@@ -94,12 +94,12 @@ export function auditProduction(
     return;
   }
 
-  runCommand(pm, ["audit", "--audit-level", auditLevel]);
+  runCommand(pm, ["audit", "--production", "--audit-level", auditLevel]);
   for (const prefix of prefixes) {
     if (prefix.length === 0) {
       continue;
     }
-    runCommand(pm, ["audit", "--audit-level", auditLevel], prefix);
+    runCommand(pm, ["audit", "--production", "--audit-level", auditLevel], prefix);
   }
 }
 

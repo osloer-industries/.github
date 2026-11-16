@@ -78,6 +78,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `node-npm-quality.yml` | `package-manager` | `npm` | `npm` (default) or `bun`; any other value fails the job |
 | `node-npm-quality.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` (passed to `setup-bun`) |
 | `node-npm-quality.yml` | `check-npm-script` | `check` | npm script passed to `npm run` for the quality gate |
+| `node-npm-quality.yml` | `project-root` | `""` | Optional subdirectory for install, audit, and run (empty = repo root) |
 | `node-npm-quality.yml` | `npm-prefixes-json` | `"[]"` | JSON array of extra `--prefix` paths for `npm ci` and `npm audit` (monorepo helpers, e.g. `["packages/eslint-sonarjs"]`) |
 | `node-npm-quality.yml` | `fetch-depth` | `1` | Checkout depth; use `0` when PR jobs run git-based helpers (guardrail notice, changed-path gates) |
 | `node-npm-quality.yml` | `pr-pre-check-script` | *(empty)* | Caller script run with `node` on `pull_request` only; sets `GUARDRAIL_BASE_REF` to the PR base SHA |
@@ -93,6 +94,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
 | `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
 | `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
+| `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
 | `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
@@ -108,7 +110,7 @@ Reusables that install dependencies and run `package.json` scripts accept `packa
 | `package-manager` | Setup | Install | Run | Audit |
 | --- | --- | --- | --- | --- |
 | `npm` (default) | `actions/setup-node` with `cache: npm` | `npm ci` (`--ignore-scripts` when enabled) | `npm run` | `npm audit --omit=dev` |
-| `bun` | `oven-sh/setup-bun` (optional `bun-version-file`) | `bun install --frozen-lockfile` (`--ignore-scripts` when enabled) | `bun run` | `bun audit` |
+| `bun` | `oven-sh/setup-bun` (optional `bun-version-file`) | `bun install --frozen-lockfile` (`--ignore-scripts` when enabled) | `bun run` | `bun audit --production` |
 
 **Bun caller example (quality):**
 
