@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 /**
  * Fail closed unless every entry in the GitHub Actions `needs` context is result success.
- * Jobs that run only on pull_request may be `skipped` on other workflow events (push, schedule).
+ * Only the Sonar zero-issues caller job may be `skipped` on non-pull_request events.
  */
 
 import { fileURLToPath } from "node:url";
 
 export const ALLOWED_NEEDS_RESULTS = new Set(["success"]);
 
-/**
- * Default caller `needs` job ids for SonarCloud zero-open-issues (override via PULL_REQUEST_ONLY_NEED_JOBS).
- * Skipped is acceptable on non-pull_request events; never on pull_request.
- */
-export const DEFAULT_PULL_REQUEST_ONLY_NEED_JOBS = ["sonar-zero-open-issues"] as const;
+/** Default caller `needs` job id for SonarCloud zero-open-issues (override via SONAR_ZERO_ISSUES_JOB). */
+export const DEFAULT_SONAR_ZERO_ISSUES_JOB_ID = "sonar-zero-open-issues";
 
 export interface NeedsJobEntry {
   result: string;
@@ -50,16 +47,17 @@ function parseNeedsEntry(value: unknown): NeedsJobEntry | null {
   return { result, outputs: mapped };
 }
 
-export function parsePullRequestOnlyJobIds(raw: string | undefined): Set<string> {
+export function parseSonarZeroIssuesJobId(raw: string | undefined): string {
   const trimmed = raw?.trim() ?? "";
   if (trimmed.length === 0) {
-    return new Set(DEFAULT_PULL_REQUEST_ONLY_NEED_JOBS);
+    return DEFAULT_SONAR_ZERO_ISSUES_JOB_ID;
   }
-  const ids = trimmed
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  return new Set(ids);
+  if (trimmed.includes(",")) {
+    throw new Error(
+      "SONAR_ZERO_ISSUES_JOB must be a single job id (commas are not allowed); only the Sonar zero-issues caller job may be skipped off pull_request",
+    );
+  }
+  return trimmed;
 }
 
 export function parseNeedsJson(raw: string): NeedsMap {
@@ -87,12 +85,12 @@ export function parseNeedsJson(raw: string): NeedsMap {
   return needs;
 }
 
-function skippedAllowedForJob(
+function skippedAllowedForSonarJob(
   jobId: string,
   eventName: string | undefined,
-  pullRequestOnlyJobs: Set<string>,
+  sonarZeroIssuesJobId: string,
 ): boolean {
-  if (!pullRequestOnlyJobs.has(jobId)) {
+  if (jobId !== sonarZeroIssuesJobId) {
     return false;
   }
   if (eventName === "pull_request") {
@@ -104,7 +102,7 @@ function skippedAllowedForJob(
 export function findNeedsFailures(
   needs: NeedsMap,
   eventName?: string,
-  pullRequestOnlyJobs: Set<string> = parsePullRequestOnlyJobIds(undefined),
+  sonarZeroIssuesJobId: string = DEFAULT_SONAR_ZERO_ISSUES_JOB_ID,
 ): string[] {
   const failures: string[] = [];
   const entries = Object.entries(needs);
@@ -118,7 +116,7 @@ export function findNeedsFailures(
       failures.push(`${jobId}: missing result`);
       continue;
     }
-    if (result === "skipped" && skippedAllowedForJob(jobId, eventName, pullRequestOnlyJobs)) {
+    if (result === "skipped" && skippedAllowedForSonarJob(jobId, eventName, sonarZeroIssuesJobId)) {
       continue;
     }
     if (!ALLOWED_NEEDS_RESULTS.has(result)) {
@@ -141,9 +139,16 @@ function formatCaughtError(error: unknown): string {
 export function runCiPassedGate(
   needsJson: string,
   eventName?: string,
-  pullRequestOnlyJobsRaw?: string,
+  sonarZeroIssuesJobRaw?: string,
 ): number {
-  const pullRequestOnlyJobs = parsePullRequestOnlyJobIds(pullRequestOnlyJobsRaw);
+  let sonarZeroIssuesJobId: string;
+  try {
+    sonarZeroIssuesJobId = parseSonarZeroIssuesJobId(sonarZeroIssuesJobRaw);
+  } catch (error: unknown) {
+    console.error(`::error::${formatCaughtError(error)}`);
+    return 1;
+  }
+
   let needs: NeedsMap;
   try {
     needs = parseNeedsJson(needsJson);
@@ -152,7 +157,7 @@ export function runCiPassedGate(
     return 1;
   }
 
-  const failures = findNeedsFailures(needs, eventName, pullRequestOnlyJobs);
+  const failures = findNeedsFailures(needs, eventName, sonarZeroIssuesJobId);
   if (failures.length > 0) {
     for (const failure of failures) {
       console.error(`::error::Required job did not succeed: ${failure}`);
@@ -170,8 +175,8 @@ export function runCiPassedGate(
 function main(): void {
   const needsJson = process.env.NEEDS_JSON ?? "";
   const eventName = process.env.GITHUB_EVENT_NAME;
-  const pullRequestOnlyJobsRaw = process.env.PULL_REQUEST_ONLY_NEED_JOBS;
-  process.exit(runCiPassedGate(needsJson, eventName, pullRequestOnlyJobsRaw));
+  const sonarZeroIssuesJobRaw = process.env.SONAR_ZERO_ISSUES_JOB;
+  process.exit(runCiPassedGate(needsJson, eventName, sonarZeroIssuesJobRaw));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

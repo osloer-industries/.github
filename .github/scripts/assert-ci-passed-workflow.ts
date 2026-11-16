@@ -43,16 +43,16 @@ if (!reusable.includes("GITHUB_EVENT_NAME")) {
   fail(REUSABLE, "must pass GITHUB_EVENT_NAME into the gate step");
 }
 
-if (!reusable.includes("pull-request-only-jobs")) {
-  fail(REUSABLE, "must accept pull-request-only-jobs input for PR-only upstream jobs");
+if (!reusable.includes("sonar-zero-issues-job")) {
+  fail(REUSABLE, "must accept sonar-zero-issues-job input for Sonar zero-issues caller job id");
 }
 
-if (!reusable.includes("PULL_REQUEST_ONLY_NEED_JOBS")) {
-  fail(REUSABLE, "must pass pull-request-only-jobs into PULL_REQUEST_ONLY_NEED_JOBS");
+if (!reusable.includes("SONAR_ZERO_ISSUES_JOB")) {
+  fail(REUSABLE, "must pass sonar-zero-issues-job into SONAR_ZERO_ISSUES_JOB");
 }
 
-if (!script.includes("parsePullRequestOnlyJobIds")) {
-  fail(GATE_SCRIPT, "must parse pull-request-only job allowlist for skip tolerance");
+if (!script.includes("parseSonarZeroIssuesJobId")) {
+  fail(GATE_SCRIPT, "must parse a single Sonar zero-issues job id for push skip tolerance");
 }
 
 if (reusable.includes("continue-on-error: true")) {
