@@ -39,6 +39,22 @@ if (!script.includes("ALLOWED_NEEDS_RESULTS")) {
   fail(GATE_SCRIPT, "must fail closed with an explicit success-only allowlist");
 }
 
+if (!reusable.includes("GITHUB_EVENT_NAME")) {
+  fail(REUSABLE, "must pass GITHUB_EVENT_NAME into the gate step");
+}
+
+if (!reusable.includes("sonar-zero-issues-job")) {
+  fail(REUSABLE, "must accept sonar-zero-issues-job input for Sonar zero-issues caller job id");
+}
+
+if (!reusable.includes("SONAR_ZERO_ISSUES_JOB")) {
+  fail(REUSABLE, "must pass sonar-zero-issues-job into SONAR_ZERO_ISSUES_JOB");
+}
+
+if (!script.includes("parseSonarZeroIssuesJobId")) {
+  fail(GATE_SCRIPT, "must parse a single Sonar zero-issues job id for push skip tolerance");
+}
+
 if (reusable.includes("continue-on-error: true")) {
   fail(REUSABLE, "must not use continue-on-error");
 }
@@ -70,6 +86,10 @@ if (!hasReusableCiPassed && !hasInlineCiPassed) {
 
 if (!ci.includes("NEEDS_JSON: ${{ toJSON(needs) }}")) {
   fail(CI_WORKFLOW, "ci-passed must pass toJSON(needs) into NEEDS_JSON");
+}
+
+if (hasInlineCiPassed && !ci.includes("GITHUB_EVENT_NAME: ${{ github.event_name }}")) {
+  fail(CI_WORKFLOW, "inlined ci-passed must pass GITHUB_EVENT_NAME into the gate step");
 }
 
 function listCiJobIds(ciYaml: string): string[] {

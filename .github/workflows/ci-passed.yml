@@ -15,6 +15,13 @@ on:
         description: Job timeout
         type: number
         default: 5
+      sonar-zero-issues-job:
+        description: >
+          Caller `needs` job id for SonarCloud zero-open-issues (set job-level
+          `if: github.event_name == 'pull_request'` on that job). Only this id may be skipped on
+          non-pull_request events; a single job id only (no lists).
+        type: string
+        default: sonar-zero-open-issues
 
 jobs:
   ci-passed:
@@ -38,4 +45,6 @@ jobs:
       - name: Require every upstream job to succeed
         env:
           NEEDS_JSON: ${{ inputs.needs-json }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          SONAR_ZERO_ISSUES_JOB: ${{ inputs.sonar-zero-issues-job }}
         run: node reusables/.github/scripts/ci-passed-gate.ts
