@@ -46,19 +46,30 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 ## Reusable workflow maintenance (this repository)
 
-- Like `workflow-security.yml`, `agents-md-lint.yml` also lists `pull_request` / `push` to `main` so this repository exercises the reusable without a same-repo `uses: ./…` caller in `ci.yml`.
-- Cross-repo reusable workflows **inline** large TypeScript gates where checkout is unsafe (`.github/scripts/codeql-gate-inline.ts`, `.github/scripts/zizmor-thresholds-inline.ts`). Workflows that sparse-checkout org scripts (`.github/workflows/sonarcloud-zero-issues.yml`, `.github/workflows/mutation-changed.yml`, `.github/workflows/ci-passed.yml`, `.github/workflows/auto-merge.yml`, `.github/workflows/agents-md-lint.yml`) must checkout at **`${{ job.workflow_sha }}`** (the commit in the caller’s `uses:` pin; not `github.workflow_sha`, which is the caller workflow). CI enforces via `.github/scripts/assert-reusables-script-checkout.ts`; optional manual smoke via `.github/workflows/reusables-job-context-smoke.yml`.
-- Canonical org Agent workflow block for fleet drift checks: `.github/agents-org-workflow-block.md` (markers + body; gate compares whitespace-normalised content and marker version).
-- Consumer repositories under **osloer-industries** should embed the block from `.github/agents-org-workflow-block.md` at their reusables pin (marker version must match the pin’s block file).
+- Like `workflow-security.yml`, `agents-md-lint.yml` also lists `pull_request` / `push` to `main` so this repository exercises
+  the reusable without a same-repo `uses: ./…` caller in `ci.yml`.
+- Cross-repo reusable workflows **inline** large TypeScript gates where checkout is unsafe
+  (`.github/scripts/codeql-gate-inline.ts`, `.github/scripts/zizmor-thresholds-inline.ts`).
+- Workflows that sparse-checkout org scripts (`sonarcloud-zero-issues.yml`, `mutation-changed.yml`, `ci-passed.yml`,
+  `auto-merge.yml`, `agents-md-lint.yml`) must checkout at **`${{ job.workflow_sha }}`** (the commit in the caller’s
+  `uses:` pin; not `github.workflow_sha`, which is the caller workflow).
+- CI enforces via `.github/scripts/assert-reusables-script-checkout.ts`; optional manual smoke via
+  `.github/workflows/reusables-job-context-smoke.yml`.
+- Canonical org Agent workflow block for fleet drift checks: `.github/agents-org-workflow-block.md` (markers + body; gate
+  compares whitespace-normalised content and marker version).
+- Consumer repositories under **osloer-industries** should embed the block from `.github/agents-org-workflow-block.md`
+  at their reusables pin (marker version must match the pin’s block file).
 - TypeScript under `.github/scripts/**` is type-checked and linted via `.github/package.json` (`npm run check` in CI).
-- Unit tests use **`node --test`** on Node 24; use **`--experimental-strip-types`** only where already used in this repository.
+- Unit tests use **`node --test`** on Node 24; use **`--experimental-strip-types`** only where already used in this
+  repository.
 - Do not edit org rulesets, repository settings, or consumer repos from this repository unless explicitly asked.
 
 ## SonarCloud zero open issues
 
 - Workflow: `.github/workflows/sonarcloud-zero-issues.yml` (`workflow_call`).
 - Canonical script: `.github/scripts/sonarcloud-zero-issues.ts`.
-- Stable job check name: **`SonarCloud zero open issues`**. Callers must list this job in **`ci-passed` `needs:`**; org rulesets require only **`ci-passed`**, not this job separately.
+- Stable job check name: **`SonarCloud zero open issues`**. Callers must list this job in **`ci-passed` `needs:`**; org
+  rulesets require only **`ci-passed`**, not this job separately.
 - After editing the script, unit tests run in `.github/workflows/ci.yml` (`SonarCloud zero issues unit tests`).
 
 ## ci-passed aggregate gate
@@ -66,9 +77,15 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Workflow: `.github/workflows/ci-passed.yml` (`workflow_call`).
 - Canonical script: `.github/scripts/ci-passed-gate.ts` (sparse checkout at `job.workflow_sha`).
 - Stable required check name: **`ci-passed`** (override with `job-name` input).
-- Caller job must use `if: always()` and pass `needs-json: ${{ toJSON(needs) }}` listing **every** upstream CI job (including Workflow security, CodeQL, and SonarCloud zero open issues).
-- Org standard: list the Sonar zero-issues caller job in `ci-passed` `needs:`; give that job `if: github.event_name == 'pull_request'`. The gate allows **only** that job (override id via `sonar-zero-issues-job`, default `sonar-zero-open-issues`) to be **skipped** on non–`pull_request` events; on `pull_request`, skipped/cancelled/missing/failure still fails `ci-passed`.
-- Contract: `.github/scripts/assert-ci-passed-workflow.ts`; tests in `.github/workflows/ci.yml` (`Auto-merge unit tests` / workflow-security contract job).
+- Caller job must use `if: always()` and pass `needs-json: ${{ toJSON(needs) }}` listing **every** upstream CI job
+  (including Workflow security, CodeQL, and SonarCloud zero open issues).
+- Org standard: list the Sonar zero-issues caller job in `ci-passed` `needs:`; give that job
+  `if: github.event_name == 'pull_request'`.
+- The gate allows **only** that job (override id via `sonar-zero-issues-job`, default `sonar-zero-open-issues`) to be
+  **skipped** on non–`pull_request` events; on `pull_request`, skipped/cancelled/missing/failure still fails
+  `ci-passed`.
+- Contract: `.github/scripts/assert-ci-passed-workflow.ts`; tests in `.github/workflows/ci.yml` (`Auto-merge unit tests`
+  / workflow-security contract job).
 
 ## Auto-merge (low-risk PRs)
 
@@ -76,9 +93,12 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Canonical script: `.github/scripts/auto-merge.ts` (sparse checkout at `job.workflow_sha`).
 - Stable default check name: job **`Auto-merge`**.
 - After editing the script, unit tests run in `.github/workflows/ci.yml` (`Auto-merge unit tests`).
-- Uses `gh pr merge --auto` only (never direct merge). Caller must use `pull_request`, not `pull_request_target`. Dependabot PRs need `RELEASE_APP_PRIVATE_KEY` as a Dependabot secret when the workflow runs on Dependabot branches.
-- Release Please: gate in `.github/scripts/release-please-version-gate.ts` (manifest patch/minor only; no breaking markers; major bumps → label `release:major-hold` for manual merge — majors never auto-merge).
-- Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks) is green.
+- Uses `gh pr merge --auto` only (never direct merge). Caller must use `pull_request`, not `pull_request_target`.
+- Dependabot PRs need `RELEASE_APP_PRIVATE_KEY` as a Dependabot secret when the workflow runs on Dependabot branches.
+- Release Please: gate in `.github/scripts/release-please-version-gate.ts` (manifest patch/minor only; no breaking
+  markers; major bumps → label `release:major-hold` for manual merge — majors never auto-merge).
+- Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks)
+  is green.
 
 ## Mutation (changed src)
 
@@ -89,11 +109,15 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 ## AGENTS.md lint (fleet desloppify)
 
-- Workflow: `.github/workflows/agents-md-lint.yml` (`workflow_call`).
-- Canonical script: `.github/scripts/agents-md-lint.ts`; shared markdownlint config `.github/.markdownlint-cli2.jsonc` + `.github/.markdownlint.json` (lockfile under `.github/package-lock.json`).
+- Workflow: `.github/workflows/agents-md-lint.yml` (`workflow_call` plus `pull_request` / `push` to `main` on this
+  repository).
+- Canonical script: `.github/scripts/agents-md-lint.ts`; shared markdownlint config `.github/.markdownlint-cli2.jsonc` +
+  `.github/.markdownlint.json` (lockfile under `.github/package-lock.json`).
 - Stable default check name: job **`AGENTS.md lint`** (override with `job-name`).
-- After editing the script, unit tests run in `.github/workflows/ci.yml` (`AGENTS.md lint unit tests`). This repository also runs the reusable self-call in `.github/workflows/ci.yml`.
-- Checks: markdownlint (no inline config bypass), size budget, filler warnings and emoji errors, package script citations, backtick repo paths, versioned org Agent workflow block, tracked forbidden instruction files (`git ls-files` denylist aligned with template `check:no-claude-md` scope).
+- After editing the script, unit tests run in `.github/workflows/ci.yml` (`AGENTS.md lint unit tests`).
+- Checks: markdownlint (no inline config bypass), size budget, filler warnings and emoji errors, package script
+  citations, backtick repo paths, versioned org Agent workflow block, tracked forbidden instruction files (`git ls-files`
+  denylist aligned with template `check:no-claude-md` scope).
 
 ## Docs
 
