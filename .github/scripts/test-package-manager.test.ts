@@ -21,9 +21,17 @@ test("parsePackageManager rejects unknown values", () => {
 test("runPackageManagerCli validate prints manager", () => {
   const original = process.env.PACKAGE_MANAGER;
   process.env.PACKAGE_MANAGER = "npm";
+  const written: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    written.push(chunk.toString());
+    return true;
+  }) as typeof process.stdout.write;
   try {
     runPackageManagerCli(["validate"]);
+    assert.equal(written.join(""), "package-manager: npm\n");
   } finally {
+    process.stdout.write = originalWrite;
     process.env.PACKAGE_MANAGER = original;
   }
 });

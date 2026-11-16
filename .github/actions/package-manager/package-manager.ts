@@ -44,19 +44,24 @@ function runCommand(
   });
 }
 
+function installRootFlags(
+  pm: PackageManager,
+  ignoreScripts: boolean,
+): string[] {
+  if (pm === "npm") {
+    return ignoreScripts ? ["ci", "--ignore-scripts"] : ["ci"];
+  }
+  return ignoreScripts
+    ? ["install", "--frozen-lockfile", "--ignore-scripts"]
+    : ["install", "--frozen-lockfile"];
+}
+
 export function installDependencies(
   pm: PackageManager,
   ignoreScripts: boolean,
   prefixes: readonly string[],
 ): void {
-  const rootFlags: string[] =
-    pm === "npm"
-      ? ignoreScripts
-        ? ["ci", "--ignore-scripts"]
-        : ["ci"]
-      : ignoreScripts
-        ? ["install", "--frozen-lockfile", "--ignore-scripts"]
-        : ["install", "--frozen-lockfile"];
+  const rootFlags = installRootFlags(pm, ignoreScripts);
 
   runCommand(pm, rootFlags);
 
@@ -122,11 +127,11 @@ function parsePrefixesJson(json: string | undefined): string[] {
   }
   const parsed: unknown = JSON.parse(raw);
   if (!Array.isArray(parsed)) {
-    throw new Error("NPM_PREFIXES_JSON must be a JSON array of strings.");
+    throw new TypeError("NPM_PREFIXES_JSON must be a JSON array of strings.");
   }
   return parsed.map((entry) => {
     if (typeof entry !== "string") {
-      throw new Error("NPM_PREFIXES_JSON array entries must be strings.");
+      throw new TypeError("NPM_PREFIXES_JSON array entries must be strings.");
     }
     return entry;
   });
