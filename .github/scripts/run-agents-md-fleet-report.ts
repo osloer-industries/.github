@@ -45,6 +45,10 @@ function cloneRepo(slug: string, dir: string): string | null {
   }
 }
 
+function escapeMarkdownTableCell(value: string): string {
+  return value.replaceAll("|", String.raw`\|`);
+}
+
 function summarize(findings: ReturnType<typeof lintAgentsMd>): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const f of findings) {
@@ -65,7 +69,13 @@ try {
     } else {
       const cloneErr = cloneRepo(slug, dir);
       if (cloneErr) {
-        rows.push(`| ${slug} | clone failed | ${cloneErr.replaceAll("|", String.raw`\|`)} |`);
+        rows.push(
+          "| " +
+            slug +
+            " | clone failed | " +
+            escapeMarkdownTableCell(cloneErr) +
+            " |",
+        );
         continue;
       }
     }

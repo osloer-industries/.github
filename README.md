@@ -29,7 +29,7 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 
 ### SonarCloud zero open issues
 
-SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, waits for the compute engine to finish, then requires a stable `api/issues/search` snapshot before failing on non-zero `issueStatuses=OPEN,CONFIRMED`. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 ### Mutation (changed src)
 
