@@ -266,7 +266,7 @@ export function hasInProgressCeForPullRequest(
 export function issueSetFingerprint(issues: readonly SonarIssue[]): string {
   return issues
     .map((issue) => issue.key ?? `${issue.rule}:${issue.component}:${issue.line ?? 0}`)
-    .toSorted()
+    .toSorted((a, b) => a.localeCompare(b))
     .join("\n");
 }
 
@@ -423,6 +423,12 @@ function parseIssueMinPollsBeforeSettle(env: NodeJS.ProcessEnv): number {
   return raw;
 }
 
+interface IssueSettleState {
+  stableReads: number;
+  lastFingerprint: string;
+  pollsCompleted: number;
+}
+
 export async function fetchOpenIssuesWhenSettled(
   config: SonarConfig,
   fetchImpl: FetchLike,
@@ -436,41 +442,51 @@ export async function fetchOpenIssuesWhenSettled(
   const minPollsBeforeSettle =
     options.minPollsBeforeSettle ?? config.issuesMinPollsBeforeSettle;
 
-  let stableReads = 0;
-  let lastFingerprint = "";
-  let lastIssues: SonarIssue[] = [];
-  let pollsCompleted = 0;
+  const pollOnce = async (
+    state: IssueSettleState,
+  ): Promise<SonarIssue[]> => {
+    if (nowFn() >= config.deadlineMs) {
+      throw new Error(
+        `Timed out waiting for SonarCloud open-issue index to stabilise on PR #${config.pullRequestNumber}.`,
+      );
+    }
 
-  while (nowFn() < config.deadlineMs) {
     const issues = await fetchOpenIssues(config, fetchImpl);
-    pollsCompleted += 1;
+    const pollsCompleted = state.pollsCompleted + 1;
     const fingerprint = issueSetFingerprint(issues);
-    if (fingerprint === lastFingerprint) {
-      stableReads += 1;
-      lastIssues = issues;
-      if (
-        stableReads >= settlePolls &&
-        pollsCompleted >= minPollsBeforeSettle
-      ) {
+
+    if (fingerprint === state.lastFingerprint) {
+      const stableReads = state.stableReads + 1;
+      if (stableReads >= settlePolls && pollsCompleted >= minPollsBeforeSettle) {
         console.log(
           `SonarCloud open-issue list stable across ${settlePolls} poll(s) after ${pollsCompleted} poll(s) (${issues.length} issue(s)).`,
         );
-        return lastIssues;
+        return issues;
       }
-    } else {
-      lastFingerprint = fingerprint;
-      stableReads = 1;
-      lastIssues = issues;
-      console.log(
-        `SonarCloud open-issue count changed (${issues.length}); waiting for issue index to settle.`,
-      );
+      await sleepFn(config.pollIntervalMs);
+      return pollOnce({
+        stableReads,
+        lastFingerprint: state.lastFingerprint,
+        pollsCompleted,
+      });
     }
-    await sleepFn(config.pollIntervalMs);
-  }
 
-  throw new Error(
-    `Timed out waiting for SonarCloud open-issue index to stabilise on PR #${config.pullRequestNumber}.`,
-  );
+    console.log(
+      `SonarCloud open-issue count changed (${issues.length}); waiting for issue index to settle.`,
+    );
+    await sleepFn(config.pollIntervalMs);
+    return pollOnce({
+      stableReads: 1,
+      lastFingerprint: fingerprint,
+      pollsCompleted,
+    });
+  };
+
+  return pollOnce({
+    stableReads: 0,
+    lastFingerprint: "",
+    pollsCompleted: 0,
+  });
 }
 
 export function printIssues(
