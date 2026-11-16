@@ -15,6 +15,14 @@ export const ORG_BLOCK_START_RE =
   /<!--\s*org-agent-workflow:start\s+(v[\d.]+)\s*-->/u;
 export const ORG_BLOCK_END = "<!-- org-agent-workflow:end -->";
 
+const GIT_EXECUTABLE = process.env.AGENTS_MD_GIT_PATH ?? "/usr/bin/git";
+
+const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/gu;
+
+function escapeForRegExpLiteral(phrase: string): string {
+  return phrase.replace(REGEX_SPECIALS, String.raw`\$&`);
+}
+
 export const FILLER_PHRASES: readonly string[] = [
   "best practices",
   "clean code",
@@ -186,8 +194,8 @@ export function findingsForFiller(content: string): LintFinding[] {
   const findings: LintFinding[] = [];
   const prose = stripCodeForProseScan(content);
   for (const phrase of FILLER_PHRASES) {
-    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`\\b${escaped}\\b`, "giu");
+    const escaped = escapeForRegExpLiteral(phrase);
+    const re = new RegExp(String.raw`\b${escaped}\b`, "giu");
     for (const match of prose.matchAll(re)) {
       if (match.index === undefined) {
         continue;
@@ -239,6 +247,62 @@ const SCRIPT_PATTERNS: readonly { re: RegExp; label: string }[] = [
   },
 ];
 
+function scriptNameFromPackagePattern(label: string, match: RegExpMatchArray): string {
+  return label === "npm test" ? "test" : (match[1] ?? "");
+}
+
+function findingsForOneScriptPattern(
+  content: string,
+  re: RegExp,
+  label: string,
+  hasPackageJson: boolean,
+  pkg: PackageScriptsResult,
+  known: ReadonlySet<string>,
+): LintFinding[] {
+  const findings: LintFinding[] = [];
+  re.lastIndex = 0;
+  for (const match of content.matchAll(re)) {
+    const matchIndex = match.index;
+    if (matchIndex === undefined) {
+      continue;
+    }
+    const script = scriptNameFromPackagePattern(label, match);
+    if (!isScriptToken(script)) {
+      continue;
+    }
+    if (!hasPackageJson && !pkg.errorFinding) {
+      findings.push({
+        rule: "npm-script",
+        message: `${label} cites ${JSON.stringify(script)} but no package.json is available`,
+        line: lineNumberAt(content, matchIndex),
+        severity: "error",
+      });
+      continue;
+    }
+    if (pkg.errorFinding) {
+      continue;
+    }
+    if (known.size === 0) {
+      findings.push({
+        rule: "npm-script",
+        message: `${label} cites ${JSON.stringify(script)} but package.json has no scripts`,
+        line: lineNumberAt(content, matchIndex),
+        severity: "error",
+      });
+      continue;
+    }
+    if (!known.has(script)) {
+      findings.push({
+        rule: "npm-script",
+        message: `${label} references missing package.json script ${JSON.stringify(script)}`,
+        line: lineNumberAt(content, matchIndex),
+        severity: "error",
+      });
+    }
+  }
+  return findings;
+}
+
 export function findingsForPackageScripts(
   content: string,
   pkg: PackageScriptsResult,
@@ -250,43 +314,9 @@ export function findingsForPackageScripts(
   }
   const known = new Set(pkg.scriptNames);
   for (const { re, label } of SCRIPT_PATTERNS) {
-    re.lastIndex = 0;
-    for (const match of content.matchAll(re)) {
-      const script =
-        label === "npm test" ? "test" : (match[1] ?? "");
-      if (!isScriptToken(script)) {
-        continue;
-      }
-      if (!hasPackageJson && !pkg.errorFinding) {
-        findings.push({
-          rule: "npm-script",
-          message: `${label} cites ${JSON.stringify(script)} but no package.json is available`,
-          line: lineNumberAt(content, match.index),
-          severity: "error",
-        });
-        continue;
-      }
-      if (pkg.errorFinding) {
-        continue;
-      }
-      if (known.size === 0) {
-        findings.push({
-          rule: "npm-script",
-          message: `${label} cites ${JSON.stringify(script)} but package.json has no scripts`,
-          line: lineNumberAt(content, match.index),
-          severity: "error",
-        });
-        continue;
-      }
-      if (!known.has(script)) {
-        findings.push({
-          rule: "npm-script",
-          message: `${label} references missing package.json script ${JSON.stringify(script)}`,
-          line: lineNumberAt(content, match.index),
-          severity: "error",
-        });
-      }
-    }
+    findings.push(
+      ...findingsForOneScriptPattern(content, re, label, hasPackageJson, pkg, known),
+    );
   }
   return findings;
 }
@@ -459,12 +489,14 @@ export interface OrgBlockRegion {
 
 export function extractOrgBlockRegion(content: string): OrgBlockRegion | null {
   const normalized = content.replaceAll("\r\n", "\n");
-  const startMatch = normalized.match(ORG_BLOCK_START_RE);
-  if (!startMatch || startMatch.index === undefined) {
+  ORG_BLOCK_START_RE.lastIndex = 0;
+  const startMatch = ORG_BLOCK_START_RE.exec(normalized);
+  if (!startMatch) {
     return null;
   }
+  const startIndex = startMatch.index;
   const version = startMatch[1] ?? "";
-  const startIdx = startMatch.index + startMatch[0].length;
+  const startIdx = startIndex + startMatch[0].length;
   const endIdx = normalized.indexOf(ORG_BLOCK_END, startIdx);
   if (endIdx < 0) {
     return null;
@@ -485,7 +517,8 @@ export function parseCanonicalOrgBlock(raw: string): {
   if (region) {
     return region;
   }
-  const startMatch = trimmed.match(ORG_BLOCK_START_RE);
+  ORG_BLOCK_START_RE.lastIndex = 0;
+  const startMatch = ORG_BLOCK_START_RE.exec(trimmed);
   const version = startMatch?.[1] ?? "unknown";
   return { version, body: trimmed };
 }
@@ -568,7 +601,7 @@ export function findingsForOrgWorkflowBlock(
 
 export function listTrackedFiles(repoRoot: string): string[] {
   try {
-    const output = execFileSync("git", ["ls-files", "-z"], {
+    const output = execFileSync(GIT_EXECUTABLE, ["ls-files", "-z"], {
       cwd: repoRoot,
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,

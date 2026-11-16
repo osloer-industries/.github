@@ -22,9 +22,20 @@ const FLEET = [
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const orgBlockPath = resolve(scriptDir, "../agents-org-workflow-block.md");
 
+const GH_BIN_CANDIDATES = ["/usr/bin/gh", "/bin/gh"] as const;
+
+function resolveGhBinary(): string {
+  for (const candidate of GH_BIN_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error("gh CLI not found at /usr/bin/gh or /bin/gh");
+}
+
 function cloneRepo(slug: string, dir: string): string | null {
   try {
-    execFileSync("gh", ["repo", "clone", slug, dir, "--", "--depth", "1"], {
+    execFileSync(resolveGhBinary(), ["repo", "clone", slug, dir, "--", "--depth", "1"], {
       stdio: "pipe",
     });
     return null;
@@ -54,7 +65,7 @@ try {
     } else {
       const cloneErr = cloneRepo(slug, dir);
       if (cloneErr) {
-        rows.push(`| ${slug} | clone failed | ${cloneErr.replaceAll("|", "\\|")} |`);
+        rows.push(`| ${slug} | clone failed | ${cloneErr.replaceAll("|", String.raw`\|`)} |`);
         continue;
       }
     }
