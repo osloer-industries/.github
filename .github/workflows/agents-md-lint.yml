@@ -58,7 +58,7 @@ jobs:
           AGENTS_MD_PATH: ${{ inputs.agents-path }}
         run: |
           set -euo pipefail
-          npx --yes markdownlint-cli2@0.17.2 \
+          npx --ignore-scripts --yes markdownlint-cli2@0.17.2 \
             --config reusables/.github/agents-md.markdownlint.jsonc \
             "${AGENTS_MD_PATH}"
       - name: AGENTS.md desloppify gate

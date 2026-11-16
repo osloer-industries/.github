@@ -300,9 +300,46 @@ jobs:
       - name: Run AGENTS.md lint unit tests
         run: node --experimental-strip-types --test .github/scripts/test-agents-md-lint.test.ts
 
+  # Mirrors agents-md-lint.yml (github.sha stands in for job.workflow_sha on self-call).
   agents-md-lint-reusable-self:
     name: AGENTS.md lint
-    uses: ./.github/workflows/agents-md-lint.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ github.sha }}
+          path: reusables
+          sparse-checkout: |
+            .github/scripts/agents-md-lint.ts
+            .github/agents-org-workflow-block.md
+            .github/agents-md.markdownlint.jsonc
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: markdownlint (shared org config)
+        run: |
+          set -euo pipefail
+          npx --ignore-scripts --yes markdownlint-cli2@0.17.2 \
+            --config reusables/.github/agents-md.markdownlint.jsonc \
+            AGENTS.md
+      - name: AGENTS.md desloppify gate
+        env:
+          AGENTS_MD_REPO_ROOT: ${{ github.workspace }}
+          AGENTS_MD_PATH: AGENTS.md
+          AGENTS_MD_ORG_BLOCK_PATH: reusables/.github/agents-org-workflow-block.md
+          AGENTS_MD_REQUIRE_ORG_BLOCK: "true"
+          AGENTS_MD_MAX_LINES: 220
+          AGENTS_MD_MAX_WORDS: 3500
+        run: node reusables/.github/scripts/agents-md-lint.ts
 
   mutation-changed-unit:
     name: Mutation changed unit tests

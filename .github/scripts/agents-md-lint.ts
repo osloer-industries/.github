@@ -112,7 +112,7 @@ export function findingsForFiller(content: string): LintFinding[] {
   while (emojiFrom < content.length) {
     const slice = content.slice(emojiFrom);
     const match = EMOJI_RE.exec(slice);
-    if (!match || match.index === undefined) {
+    if (match?.index === undefined) {
       break;
     }
     const index = emojiFrom + match.index;
@@ -244,7 +244,7 @@ export function findingsForRequiredCheckNaming(content: string): LintFinding[] {
     const wrong = names.filter(
       (n) =>
         n !== "ci-passed" &&
-        /^[\w][\w -]{0,60}$/u.test(n) &&
+        /^\w[\w -]{0,60}$/u.test(n) &&
         !n.includes("/") &&
         !/\b(run|merge|push)\b/i.test(n),
     );
