@@ -1,5 +1,8 @@
 name: Reusable — Node setup smoke matrix
 
+# package-manager: bun runs the same setup npm script names. Default scenarios-json includes
+# npm-package, which may fail when package-manager is bun — pass a trimmed scenarios-json for bun repos.
+
 on:
   workflow_call:
     inputs:
@@ -19,10 +22,22 @@ on:
         description: Node version file in the caller repository
         type: string
         default: .nvmrc
+      package-manager:
+        description: Package manager for install and setup script (npm or bun; default npm).
+        type: string
+        default: npm
+      bun-version-file:
+        description: Optional Bun version file when package-manager is bun.
+        type: string
+        default: ""
       timeout-minutes:
         description: Per-matrix job timeout
         type: number
         default: 15
+      project-root:
+        description: Optional subdirectory under the caller repo for install and run (empty = repository root)
+        type: string
+        default: ""
 
 jobs:
   setup-smoke:
@@ -38,15 +53,52 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.package-manager == 'npm' && inputs.project-root == ''
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
-      - run: npm ci --ignore-scripts
-      - name: Run setup scenario
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.package-manager == 'npm' && inputs.project-root != ''
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+          cache-dependency-path: ${{ format('{0}/package-lock.json', inputs.project-root) }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: inputs.package-manager == 'bun'
+        with:
+          bun-version-file: ${{ inputs.bun-version-file }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables-pm
+          sparse-checkout: .github/actions/package-manager/package-manager.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Install dependencies
         env:
-          SETUP_NPM_SCRIPT: ${{ inputs.setup-npm-script }}
-          SMOKE_NAME_PREFIX: ${{ inputs.smoke-name-prefix }}
-          SCENARIO: ${{ matrix.scenario }}
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+          WORKING_DIRECTORY: ${{ inputs.project-root }}
         run: |
           set -euo pipefail
-          npm run "$SETUP_NPM_SCRIPT" -- --scenario "$SCENARIO" --name "${SMOKE_NAME_PREFIX}${SCENARIO}-template" --yes
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" validate
+          NPM_CI_IGNORE_SCRIPTS=true "$runner" "$pm" install
+      - name: Run setup scenario
+        env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+          NPM_SCRIPT: ${{ inputs.setup-npm-script }}
+          RUN_ARGS: --scenario ${{ matrix.scenario }} --name ${{ inputs.smoke-name-prefix }}${{ matrix.scenario }}-template --yes
+          WORKING_DIRECTORY: ${{ inputs.project-root }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" run
