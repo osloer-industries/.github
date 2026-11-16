@@ -1,0 +1,7 @@
+{
+  "name": "agents-md-fixture",
+  "private": true,
+  "scripts": {
+    "check": "node -e \"0\""
+  }
+}

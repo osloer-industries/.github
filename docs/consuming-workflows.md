@@ -65,6 +65,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 | `auto-merge.yml` | Auto-merge (optional; osloer-reviewer) | `pull_request` (types: opened, synchronize, reopened, ready_for_review) |
 | `ci-passed.yml` | Aggregate required check | Called as the final job in the main CI workflow |
+| `agents-md-lint.yml` | AGENTS.md lint (override with `job-name`) | `pull_request`, `push` to default branch |
 
 ### Reusable workflow inputs (workflow security)
 
@@ -417,6 +418,34 @@ jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA # v0.x.y
 ```
+
+### AGENTS.md lint (opt-in fleet desloppify)
+
+Deterministic checks on `AGENTS.md`: shared markdownlint config, line/word budget, banned filler phrases and emoji, cited `npm run` / `bun run` scripts, backtick repo paths, sole required check naming (`ci-passed`), verbatim org **Agent workflow** block from `osloer-industries/.github`, and absence of `CLAUDE.md`. No LLM calls.
+
+**Caller setup:** copy the **Agent workflow** section from `.github/agents-org-workflow-block.md` at the reusables pin into the repository root `AGENTS.md` after adopting the release. Keep it identical to the org canonical file at that pin.
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `agents-path` | `AGENTS.md` | Path to agent instructions |
+| `job-name` | `AGENTS.md lint` | Check name |
+| `require-org-workflow-block` | `true` | Enforce embedded org block |
+| `max-lines` | `220` | Line budget |
+| `max-words` | `3500` | Word budget |
+
+```yaml
+jobs:
+  agents-md-lint:
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@REUSABLES_SHA # v0.x.y
+
+  ci-passed:
+    needs:
+      # …other jobs…
+      - agents-md-lint
+    # …
+```
+
+Set `require-org-workflow-block: false` only when migrating before the org block is copied (temporary; prefer blocking merge until the block is present).
 
 ### Auto-merge (Dependabot and Release Please)
 

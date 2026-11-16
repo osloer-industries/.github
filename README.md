@@ -1,3 +1,9 @@
+# osloer-industries/.github
+
+Org-wide reusable GitHub Actions workflows and TypeScript CI gates. Workflow index and adoption: [docs/consuming-workflows.md](docs/consuming-workflows.md). Agent conventions: [AGENTS.md](AGENTS.md) (includes `agents-md-lint.yml` for fleet `AGENTS.md` hygiene).
+
+---
+
 actionlint
 ==========
 [![CI Status][ci-badge]][ci]

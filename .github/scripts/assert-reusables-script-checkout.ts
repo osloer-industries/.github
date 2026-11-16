@@ -9,6 +9,7 @@ const WORKFLOWS = [
   ".github/workflows/mutation-changed.yml",
   ".github/workflows/auto-merge.yml",
   ".github/workflows/ci-passed.yml",
+  ".github/workflows/agents-md-lint.yml",
 ] as const;
 
 function load(path: string): string {
