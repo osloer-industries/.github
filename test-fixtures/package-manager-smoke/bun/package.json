@@ -1,0 +1,10 @@
+{
+  "name": "pm-smoke-bun",
+  "private": true,
+  "scripts": {
+    "smoke": "echo ok"
+  },
+  "dependencies": {
+    "is-odd": "3.0.1"
+  }
+}

@@ -1,0 +1,94 @@
+name: Package manager (npm or bun)
+description: Validate, install, audit, or run with npm or bun for org reusable workflows.
+
+inputs:
+  package-manager:
+    description: npm or bun (default npm).
+    required: true
+  command:
+    description: validate | install | audit | run
+    required: true
+  npm-ci-ignore-scripts:
+    description: When true, pass --ignore-scripts to install (npm ci / bun install).
+    required: false
+    default: "true"
+  npm-prefixes-json:
+    description: JSON array of extra install/audit paths (monorepo helpers).
+    required: false
+    default: "[]"
+  audit-level:
+    description: Audit level (npm audit --audit-level / bun audit --audit-level).
+    required: false
+    default: high
+  npm-script:
+    description: Script name for command run.
+    required: false
+    default: ""
+  run-args:
+    description: Extra arguments after -- for command run (space-separated).
+    required: false
+    default: ""
+  working-directory:
+    description: Directory for install, audit, and run (relative to repository root).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Validate package-manager
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+      run: |
+        set -euo pipefail
+        runner="node"
+        if [ "$PACKAGE_MANAGER" = "bun" ]; then
+          runner="bun"
+        fi
+        "$runner" "${{ github.action_path }}/package-manager.ts" validate
+    - name: Install dependencies
+      if: inputs.command == 'install'
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        NPM_CI_IGNORE_SCRIPTS: ${{ inputs.npm-ci-ignore-scripts }}
+        NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        runner="node"
+        if [ "$PACKAGE_MANAGER" = "bun" ]; then
+          runner="bun"
+        fi
+        "$runner" "${{ github.action_path }}/package-manager.ts" install
+    - name: Audit production dependencies
+      if: inputs.command == 'audit'
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        NPM_PREFIXES_JSON: ${{ inputs.npm-prefixes-json }}
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        runner="node"
+        if [ "$PACKAGE_MANAGER" = "bun" ]; then
+          runner="bun"
+        fi
+        "$runner" "${{ github.action_path }}/package-manager.ts" audit
+    - name: Run script
+      if: inputs.command == 'run'
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        NPM_SCRIPT: ${{ inputs.npm-script }}
+        RUN_ARGS: ${{ inputs.run-args }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        runner="node"
+        if [ "$PACKAGE_MANAGER" = "bun" ]; then
+          runner="bun"
+        fi
+        "$runner" "${{ github.action_path }}/package-manager.ts" run
