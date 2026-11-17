@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/osloer-industries/.github/compare/v0.1.4...v0.1.5) (2026-11-17)
+
+
+### Features
+
+* **dependency-review:** OSV-Scanner PR gate for private repos ([#47](https://github.com/osloer-industries/.github/issues/47)) ([3ea4c4b](https://github.com/osloer-industries/.github/commit/3ea4c4bc69c0cb9c251e87aaca17faf469aa4968))
+
 ## [0.1.4](https://github.com/osloer-industries/.github/compare/v0.1.3...v0.1.4) (2026-11-16)
 
 
