@@ -100,14 +100,14 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks)
   is green.
 
-## Dependency review (GHAS-free audit)
+## Dependency review (GHAS-free OSV on private)
 
 - Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
-- Canonical script: `.github/scripts/dependency-diff-audit.ts` (sparse checkout at `job.workflow_sha` when
-  `mode` is `audit`, or when `mode: auto` on a private repository).
-- Stable job check name: **`Review dependency changes`**. Input `mode` defaults to `auto` (GitHub Dependency Review on
-  public repos; npm audit diff on private repos).
-- After editing the script, unit tests run in `.github/workflows/ci.yml` (`Dependency diff audit unit tests`).
+- Private / `mode: osv` delegates to
+  `google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml` (pinned commit + `# v2.x.y` comment;
+  `upload-sarif: false`, `fail-on-vuln: true`).
+- Check names: **`Review dependency changes`** (GitHub Dependency Review path); **`Review dependency changes /
+  osv-scan`** (OSV path — nested job; use this in rulesets for private repos).
 
 ## Mutation (changed src)
 

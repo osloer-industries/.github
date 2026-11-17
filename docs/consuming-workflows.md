@@ -55,7 +55,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | --- | --- | --- |
 | `semantic-pull-request.yml` | Semantic pull request | `pull_request_target` (types: opened, reopened, edited, synchronize) |
 | `codeql-javascript-typescript.yml` | Analyze JavaScript and TypeScript | `pull_request`, `push` to default branch, optional weekly `schedule` |
-| `dependency-review.yml` | Review dependency changes | `pull_request` (npm lockfile required for audit mode) |
+| `dependency-review.yml` | Review dependency changes (public); Review dependency changes / osv-scan (private `auto`) | `pull_request` |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
@@ -228,17 +228,26 @@ This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SAR
 
 ### Dependency review
 
-The reusable job name stays **Review dependency changes**. Input **`mode`** (default **`auto`**) picks the backend:
+Input **`mode`** (default **`auto`**) picks the backend via **separate jobs** (nested reusables require job-level `uses:`):
 
 | `mode` | Behavior |
 | --- | --- |
-| `auto` | GitHub [dependency-review-action](https://github.com/actions/dependency-review-action) on **public** repos; npm audit diff on **private** repos (no GHAS). |
-| `github` | Always use dependency-review-action (`fail-on-severity` input, default `high`). |
-| `audit` | Always use the org npm audit diff gate (`.github/scripts/dependency-diff-audit.ts` at `job.workflow_sha`). |
+| `auto` | GitHub [dependency-review-action](https://github.com/actions/dependency-review-action) on **public** repos; [Google OSV-Scanner PR reusable](https://google.github.io/osv-scanner/github-action/) on **private** repos (`upload-sarif: false`, `fail-on-vuln: true` — no GHAS SARIF upload). |
+| `github` | Always dependency-review-action (`fail-on-severity` input, default `high`). |
+| `osv` | Always OSV-Scanner PR reusable (same GHAS-free settings). |
 
-**Public** repos (template, homeexchange-mcp, vakt, de-invest-sync): use the default caller below — no extra inputs.
+**Required status check names** (list the one that matches your visibility; only one job runs per PR):
 
-**Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects audit mode automatically. Remove vendored `dependency-diff-audit.mjs` when migrating off a local copy.
+| Path | GitHub check name |
+| --- | --- |
+| `github` / `auto` on a **public** repo | `Review dependency changes` |
+| `osv` / `auto` on a **private** repo | `Review dependency changes / osv-scan` |
+
+OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockfiles present in the caller tree — including npm **`package-lock.json`** and Bun **`bun.lock`**. No extra secrets.
+
+**Public** repos (template, homeexchange-mcp, vakt, de-invest-sync): default caller below.
+
+**Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects OSV automatically. Drop vendored `dependency-diff-audit.mjs` when migrating.
 
 ```yaml
 name: Dependency review
@@ -258,17 +267,15 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
-Explicit npm audit diff (optional — same as `auto` on a private repo):
+Explicit OSV (optional — same as `auto` on a private repo):
 
 ```yaml
 jobs:
   review:
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
     with:
-      mode: audit
+      mode: osv
 ```
-
-Audit mode runs `npm ci` on the caller, compares `npm audit --omit=dev` advisories at the PR head vs the pull request base SHA, and fails on newly introduced **high** or **critical** advisories (aligned with `fail-on-severity: high` on GitHub’s action). Callers need `package.json`, `package-lock.json`, and a `.nvmrc` (override with `node-version-file` if needed). No extra secrets.
 
 ### Release Please
 

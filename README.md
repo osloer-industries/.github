@@ -10,7 +10,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | --- | --- |
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
-| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (`mode: auto` — GitHub on public repos, npm audit diff on private) |
+| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (`mode: auto` — GitHub on public repos, OSV-Scanner PR on private) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please (reusable) |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
@@ -29,7 +29,16 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 
 ### Dependency review (GHAS-free on private repos)
 
-Reusable [`dependency-review.yml`](.github/workflows/dependency-review.yml) keeps the check name **Review dependency changes**. Input `mode` defaults to `auto`: **public** repositories use GitHub’s [dependency-review-action](https://github.com/actions/dependency-review-action); **private** repositories run the org npm audit diff gate (no GHAS). Override with `mode: github` or `mode: audit`. Audit script: [`.github/scripts/dependency-diff-audit.ts`](.github/scripts/dependency-diff-audit.ts), checked out at **`job.workflow_sha`**.
+Reusable [`dependency-review.yml`](.github/workflows/dependency-review.yml) uses job-level backends so nested reusables are valid. Input `mode` defaults to `auto`: **public** repos run GitHub’s [dependency-review-action](https://github.com/actions/dependency-review-action); **private** repos call Google’s maintained [OSV-Scanner PR workflow](https://google.github.io/osv-scanner/github-action/) (`upload-sarif: false`, `fail-on-vuln: true`). Override with `mode: github` or `mode: osv`.
+
+Check names (stable for branch protection):
+
+| Mode | Required check |
+| --- | --- |
+| `github` / `auto` on public | **`Review dependency changes`** |
+| `osv` / `auto` on private | **`Review dependency changes / osv-scan`** (nested job inside Google’s reusable) |
+
+OSV’s default recursive scan picks up npm **`package-lock.json`** and Bun **`bun.lock`** lockfiles in the caller repo (see [OSV GitHub Action docs](https://google.github.io/osv-scanner/github-action/)).
 
 ### SonarCloud zero open issues
 
