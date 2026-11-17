@@ -228,6 +228,29 @@ This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SAR
 
 ### Dependency review
 
+Input **`mode`** (default **`auto`**) picks the backend via **separate jobs** (nested reusables require job-level `uses:`):
+
+| `mode` | Behavior |
+| --- | --- |
+| `auto` | GitHub [dependency-review-action](https://github.com/actions/dependency-review-action) on **public** repos; [Google OSV-Scanner PR reusable](https://google.github.io/osv-scanner/github-action/) on **private** repos (`upload-sarif: false`, `fail-on-vuln: true` — no GHAS SARIF upload). |
+| `github` | Always dependency-review-action (`fail-on-severity` input, default `high`). |
+| `osv` | Always OSV-Scanner PR reusable (same GHAS-free settings). |
+
+**Required status check:** **`Review dependency changes`** (both public GitHub Dependency Review and private OSV paths).
+
+**Private OSV SARIF (no Code Scanning upload):** The nested Google reusable runs with `upload-sarif: false` and `fail-on-vuln: false` so scan artifacts are always produced. The org follow-up job:
+
+1. Re-uploads SARIF as **`osv-sarif-${{ github.run_id }}`** (`actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` — same pin as CodeQL artifact mode).
+2. Runs **`osv-reporter-action`** with `fail-on-vuln: true` (the required check outcome).
+
+The nested job also uploads **`OSV Scanner SARIF file`** (default `results.sarif`, **5-day** retention). Prefer **`osv-sarif-*`** on the workflow run for fleet-consistent triage (mirrors **`codeql-sarif-*`**).
+
+OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockfiles present in the caller tree — including npm **`package-lock.json`** and Bun **`bun.lock`**. No extra secrets.
+
+**Public** repos (template, homeexchange-mcp, vakt, de-invest-sync): default caller below.
+
+**Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects OSV automatically. Drop vendored `dependency-diff-audit.mjs` when migrating.
+
 ```yaml
 name: Dependency review
 
@@ -246,7 +269,15 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
-**Do not** replace [lunch-money-de-invest-sync](https://github.com/osloer-industries/lunch-money-de-invest-sync)’s GHAS-free `dependency-diff-audit.mjs` gate with this reusable. **Private** repos (e.g. coast-fire-visualizer): confirm the official dependency review action is available without paid GHAS before adding this caller; otherwise keep a local GHAS-free gate.
+Explicit OSV (optional — same as `auto` on a private repo):
+
+```yaml
+jobs:
+  review:
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
+    with:
+      mode: osv
+```
 
 ### Release Please
 

@@ -101,6 +101,15 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks)
   is green.
 
+## Dependency review (GHAS-free OSV on private)
+
+- Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
+- Private / `mode: osv` delegates to Google **osv-scanner-reusable-pr** (pin + `# v2.x.y` in
+  `.github/workflows/dependency-review.yml`; nested `upload-sarif: false`, `fail-on-vuln: false`; org follow-up enforces
+  with **osv-reporter-action** and uploads **`osv-sarif-${{ github.run_id }}`**).
+- Check name: **`Review dependency changes`** (github and private OSV paths). Nested job also uploads **`OSV Scanner SARIF
+  file`** (5-day retention).
+
 ## CodeQL (JavaScript and TypeScript)
 
 - Workflow: `.github/workflows/codeql-javascript-typescript.yml` (`workflow_call`).
