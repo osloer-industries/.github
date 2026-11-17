@@ -1,0 +1,7 @@
+{
+  "name": "osloer-industries-dot-github-meta",
+  "private": true,
+  "scripts": {
+    "check": "npm run check --prefix .github"
+  }
+}

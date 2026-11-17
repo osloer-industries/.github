@@ -20,6 +20,8 @@ export interface SonarConfig {
   deadlineMs: number;
   startedAtMs: number;
   organization: string;
+  issuesMinPollsBeforeSettle: number;
+  issuesSettlePolls: number;
 }
 
 export interface PullRequestAnalysis {
@@ -32,6 +34,7 @@ export interface PullRequestAnalysis {
 }
 
 export interface SonarIssue {
+  key?: string;
   rule: string;
   severity: string;
   component: string;
@@ -126,6 +129,15 @@ export function parseConfigFromEnv(
     process.exit(1);
   }
 
+  const issuesSettlePolls = parseIssueSettlePolls(env);
+  const issuesMinPollsBeforeSettle = parseIssueMinPollsBeforeSettle(env);
+  if (issuesMinPollsBeforeSettle < issuesSettlePolls) {
+    console.error(
+      "::error::SONAR_ISSUES_MIN_POLLS must be at least SONAR_ISSUES_SETTLE_POLLS so the gate cannot pass on the first stable empty snapshot.",
+    );
+    process.exit(1);
+  }
+
   return {
     token,
     host: (env.SONAR_HOST ?? DEFAULT_SONAR_HOST).replace(/\/$/, ""),
@@ -140,6 +152,8 @@ export function parseConfigFromEnv(
     startedAtMs: nowMs,
     deadlineMs: nowMs + Math.round(timeoutMinutes * 60 * 1000),
     organization,
+    issuesSettlePolls,
+    issuesMinPollsBeforeSettle,
   };
 }
 
@@ -232,6 +246,30 @@ export function latestFailedCeForPullRequest(
   return undefined;
 }
 
+export function hasInProgressCeForPullRequest(
+  tasks: CeActivityTask[],
+  pullRequestNumber: number,
+): boolean {
+  const key = String(pullRequestNumber);
+  for (const task of tasks) {
+    if (task.pullRequest !== key) {
+      continue;
+    }
+    const status = (task.status ?? "").toUpperCase();
+    if (status === "PENDING" || status === "IN_PROGRESS") {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function issueSetFingerprint(issues: readonly SonarIssue[]): string {
+  return issues
+    .map((issue) => issue.key ?? `${issue.rule}:${issue.component}:${issue.line ?? 0}`)
+    .toSorted((a, b) => a.localeCompare(b))
+    .join("\n");
+}
+
 export interface WaitOptions {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -254,13 +292,6 @@ export async function waitForPullRequestAnalysis(
       config.pullRequestNumber,
     );
 
-    if (entry && analysisMatchesHead(entry, config.headSha)) {
-      console.log(
-        `SonarCloud PR #${config.pullRequestNumber} analysis is ready for commit ${config.headSha} (analysisDate=${entry.analysisDate ?? "unknown"}).`,
-      );
-      return entry;
-    }
-
     const ceTasks = await fetchCeActivity(config, fetchImpl);
     const failed = latestFailedCeForPullRequest(
       ceTasks,
@@ -271,6 +302,19 @@ export async function waitForPullRequestAnalysis(
       throw new Error(
         `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
       );
+    }
+
+    if (entry && analysisMatchesHead(entry, config.headSha)) {
+      if (hasInProgressCeForPullRequest(ceTasks, config.pullRequestNumber)) {
+        console.log(
+          `SonarCloud PR #${config.pullRequestNumber} head commit is registered but compute engine is still running; waiting for issue indexing.`,
+        );
+      } else {
+        console.log(
+          `SonarCloud PR #${config.pullRequestNumber} analysis is ready for commit ${config.headSha} (analysisDate=${entry.analysisDate ?? "unknown"}).`,
+        );
+        return entry;
+      }
     }
 
     if (entry) {
@@ -354,6 +398,97 @@ export async function fetchOpenIssues(
   return collected;
 }
 
+const DEFAULT_ISSUE_SETTLE_POLLS = 3;
+const DEFAULT_ISSUE_MIN_POLLS = 3;
+
+function parseIssueSettlePolls(env: NodeJS.ProcessEnv): number {
+  const raw = Number(env.SONAR_ISSUES_SETTLE_POLLS ?? String(DEFAULT_ISSUE_SETTLE_POLLS));
+  if (!Number.isInteger(raw) || raw < 1) {
+    console.error(
+      `::error::SONAR_ISSUES_SETTLE_POLLS must be a positive integer (got ${JSON.stringify(env.SONAR_ISSUES_SETTLE_POLLS)}).`,
+    );
+    process.exit(1);
+  }
+  return raw;
+}
+
+function parseIssueMinPollsBeforeSettle(env: NodeJS.ProcessEnv): number {
+  const raw = Number(env.SONAR_ISSUES_MIN_POLLS ?? String(DEFAULT_ISSUE_MIN_POLLS));
+  if (!Number.isInteger(raw) || raw < 1) {
+    console.error(
+      `::error::SONAR_ISSUES_MIN_POLLS must be a positive integer (got ${JSON.stringify(env.SONAR_ISSUES_MIN_POLLS)}).`,
+    );
+    process.exit(1);
+  }
+  return raw;
+}
+
+interface IssueSettleState {
+  stableReads: number;
+  lastFingerprint: string;
+  pollsCompleted: number;
+}
+
+export async function fetchOpenIssuesWhenSettled(
+  config: SonarConfig,
+  fetchImpl: FetchLike,
+  options: WaitOptions & { settlePolls?: number; minPollsBeforeSettle?: number } = {},
+): Promise<SonarIssue[]> {
+  const sleepFn =
+    options.sleep ??
+    ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const nowFn = options.now ?? (() => Date.now());
+  const settlePolls = options.settlePolls ?? config.issuesSettlePolls;
+  const minPollsBeforeSettle =
+    options.minPollsBeforeSettle ?? config.issuesMinPollsBeforeSettle;
+
+  const pollOnce = async (
+    state: IssueSettleState,
+  ): Promise<SonarIssue[]> => {
+    if (nowFn() >= config.deadlineMs) {
+      throw new Error(
+        `Timed out waiting for SonarCloud open-issue index to stabilise on PR #${config.pullRequestNumber}.`,
+      );
+    }
+
+    const issues = await fetchOpenIssues(config, fetchImpl);
+    const pollsCompleted = state.pollsCompleted + 1;
+    const fingerprint = issueSetFingerprint(issues);
+
+    if (fingerprint === state.lastFingerprint) {
+      const stableReads = state.stableReads + 1;
+      if (stableReads >= settlePolls && pollsCompleted >= minPollsBeforeSettle) {
+        console.log(
+          `SonarCloud open-issue list stable across ${settlePolls} poll(s) after ${pollsCompleted} poll(s) (${issues.length} issue(s)).`,
+        );
+        return issues;
+      }
+      await sleepFn(config.pollIntervalMs);
+      return pollOnce({
+        stableReads,
+        lastFingerprint: state.lastFingerprint,
+        pollsCompleted,
+      });
+    }
+
+    console.log(
+      `SonarCloud open-issue count changed (${issues.length}); waiting for issue index to settle.`,
+    );
+    await sleepFn(config.pollIntervalMs);
+    return pollOnce({
+      stableReads: 1,
+      lastFingerprint: fingerprint,
+      pollsCompleted,
+    });
+  };
+
+  return pollOnce({
+    stableReads: 0,
+    lastFingerprint: "",
+    pollsCompleted: 0,
+  });
+}
+
 export function printIssues(
   config: SonarConfig,
   issues: SonarIssue[],
@@ -375,13 +510,18 @@ export function printIssues(
   }
 }
 
+export interface RunSonarZeroIssuesGateOptions extends WaitOptions {
+  settlePolls?: number;
+  minPollsBeforeSettle?: number;
+}
+
 export async function runSonarZeroIssuesGate(
   config: SonarConfig,
   fetchImpl: FetchLike = fetch,
-  waitOptions: WaitOptions = {},
+  waitOptions: RunSonarZeroIssuesGateOptions = {},
 ): Promise<number> {
   await waitForPullRequestAnalysis(config, fetchImpl, waitOptions);
-  const issues = await fetchOpenIssues(config, fetchImpl);
+  const issues = await fetchOpenIssuesWhenSettled(config, fetchImpl, waitOptions);
   if (issues.length === 0) {
     console.log(
       `SonarCloud zero open issues: no OPEN or CONFIRMED issues on PR #${config.pullRequestNumber}.`,

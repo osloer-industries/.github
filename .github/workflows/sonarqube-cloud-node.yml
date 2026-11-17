@@ -1,5 +1,9 @@
 name: Reusable — SonarQube Cloud (Node/npm)
 
+# package-manager: bun only changes how dependencies install and how the coverage script runs. Sonar
+# still reads lcov/report paths from the caller sonar-project.properties — configure coverage output
+# for the chosen runner in the consumer repository.
+
 on:
   workflow_call:
     secrets:
@@ -11,6 +15,14 @@ on:
         description: Node version file in the caller repository
         type: string
         default: .nvmrc
+      package-manager:
+        description: Package manager for install and coverage script (npm or bun; default npm).
+        type: string
+        default: npm
+      bun-version-file:
+        description: Optional Bun version file when package-manager is bun.
+        type: string
+        default: ""
       coverage-npm-script:
         description: npm script that produces coverage for Sonar (runs npm run)
         type: string
@@ -35,17 +47,48 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - if: env.SONAR_TOKEN != ''
+      - if: env.SONAR_TOKEN != '' && inputs.package-manager == 'npm'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
+      - if: env.SONAR_TOKEN != '' && inputs.package-manager == 'bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: ${{ inputs.bun-version-file }}
       - if: env.SONAR_TOKEN != ''
-        run: npm ci --ignore-scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables-pm
+          sparse-checkout: .github/actions/package-manager/package-manager.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
       - if: env.SONAR_TOKEN != ''
         env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" validate
+          NPM_CI_IGNORE_SCRIPTS=true "$runner" "$pm" install
+      - if: env.SONAR_TOKEN != ''
+        env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
           NPM_SCRIPT: ${{ inputs.coverage-npm-script }}
-        run: npm run "$NPM_SCRIPT"
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" run
       - if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.4](https://github.com/osloer-industries/.github/compare/v0.1.3...v0.1.4) (2026-11-16)
+
+
+### Features
+
+* reusable AGENTS.md lint gate for fleet desloppify ([#44](https://github.com/osloer-industries/.github/issues/44)) ([ef88323](https://github.com/osloer-industries/.github/commit/ef88323a9f2a72a17de8d5245239758610b575b1))
+
+## [0.1.3](https://github.com/osloer-industries/.github/compare/v0.1.2...v0.1.3) (2026-11-16)
+
+
+### Features
+
+* allow pull-request-only jobs skipped off pull_request in ci-passed gate ([b82b7c4](https://github.com/osloer-industries/.github/commit/b82b7c49cf6154802d337dba00f19335f943a666))
+* package-manager input (npm | bun) for Node reusables ([#40](https://github.com/osloer-industries/.github/issues/40)) ([26a5aaf](https://github.com/osloer-industries/.github/commit/26a5aaf85ee06da907388f069befd2e32cc40e60))
+
+
+### Bug Fixes
+
+* limit ci-passed push skip tolerance to single Sonar job id ([02c1f9e](https://github.com/osloer-industries/.github/commit/02c1f9ec20994bb4ef9a7b8433ffd5e818c12654))
+
 ## [0.1.2](https://github.com/osloer-industries/.github/compare/v0.1.1...v0.1.2) (2026-11-14)
 
 

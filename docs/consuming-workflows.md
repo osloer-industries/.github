@@ -65,6 +65,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 | `auto-merge.yml` | Auto-merge (optional; osloer-reviewer) | `pull_request` (types: opened, synchronize, reopened, ready_for_review) |
 | `ci-passed.yml` | Aggregate required check | Called as the final job in the main CI workflow |
+| `agents-md-lint.yml` | AGENTS.md lint (override with `job-name`) | `pull_request`, `push` to default branch |
 
 ### Reusable workflow inputs (workflow security)
 
@@ -79,16 +80,28 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 
 | Workflow | Input | Default | Purpose |
 | --- | --- | --- | --- |
+| `node-npm-quality.yml` | `package-manager` | `npm` | `npm` (default) or `bun`; any other value fails the job |
+| `node-npm-quality.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` (passed to `setup-bun`) |
 | `node-npm-quality.yml` | `check-npm-script` | `check` | npm script passed to `npm run` for the quality gate |
+| `node-npm-quality.yml` | `project-root` | `""` | Optional subdirectory for install, audit, and run (empty = repo root) |
 | `node-npm-quality.yml` | `npm-prefixes-json` | `"[]"` | JSON array of extra `--prefix` paths for `npm ci` and `npm audit` (monorepo helpers, e.g. `["packages/eslint-sonarjs"]`) |
 | `node-npm-quality.yml` | `fetch-depth` | `1` | Checkout depth; use `0` when PR jobs run git-based helpers (guardrail notice, changed-path gates) |
 | `node-npm-quality.yml` | `pr-pre-check-script` | *(empty)* | Caller script run with `node` on `pull_request` only; sets `GUARDRAIL_BASE_REF` to the PR base SHA |
+| `mutation-changed.yml` | `package-manager` | `npm` | `npm` or `bun` for install and full mutation script |
+| `mutation-changed.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `mutation-changed.yml` | `full-npm-script` | `test:mutation` | npm script for full `src/` mutation on default-branch `push` |
+| `sonarqube-cloud-node.yml` | `package-manager` | `npm` | `npm` or `bun` for install and coverage script |
+| `sonarqube-cloud-node.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `sonarqube-cloud-node.yml` | `coverage-npm-script` | `test:coverage` | npm script that generates coverage before Sonar upload |
 | `sonarcloud-zero-issues.yml` | `project-key` | *(empty → `osloer-industries_<repo>`)* | SonarCloud project key |
 | `sonarcloud-zero-issues.yml` | `organization` | `osloer-industries` | Organization segment of the default project key |
 | `sonarcloud-zero-issues.yml` | `timeout-minutes` | `20` | Max wait for PR analysis at head SHA |
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
+| `sonarcloud-zero-issues.yml` | `issues-settle-polls` | `3` | Consecutive matching open-issue API pages before enforcing zero issues |
+| `sonarcloud-zero-issues.yml` | `issues-min-polls` | `3` | Minimum issue API polls before a stable empty snapshot can pass |
+| `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
+| `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
+| `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
 | `node-setup-smoke.yml` | `setup-npm-script` | `setup` | npm script for the setup CLI |
 | `node-setup-smoke.yml` | `smoke-name-prefix` | `@smoke/` | Prefix for `--name`; matrix scenario and `-template` are appended |
 | `codeql-javascript-typescript.yml` | `code-scanning-upload` | `true` | When `false`, skips Code Scanning upload (no GHAS required); SARIF artifact + security gate |
@@ -96,6 +109,37 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `codeql-javascript-typescript.yml` | `source-root` | *(empty)* | Optional directory passed to CodeQL init as `source-root`; empty analyzes from the repository root |
 
 Callers that previously passed full shell commands should switch to npm script names only (for example `check-npm-script: check` instead of `check-command: npm run check`).
+
+### Package manager (`npm` vs `bun`)
+
+Reusables that install dependencies and run `package.json` scripts accept `package-manager` (`npm` | `bun`, default `npm`). Invalid values fail before install. Shared install/audit/run logic lives in `.github/actions/package-manager/package-manager.ts`, sparse-checked out from `osloer-industries/.github` at **`job.workflow_sha`** (same pin as the reusable `uses:` — no `./` self-repo path; actionlint does not allow `${{ job.workflow_sha }}` in `uses:` for org composite actions). The composite `action.yml` in that directory mirrors the same commands for tooling audits.
+
+| `package-manager` | Setup | Install | Run | Audit |
+| --- | --- | --- | --- | --- |
+| `npm` (default) | `actions/setup-node` with `cache: npm` | `npm ci` (`--ignore-scripts` when enabled) | `npm run` | `npm audit --omit=dev` |
+| `bun` | `oven-sh/setup-bun` (optional `bun-version-file`) | `bun install --frozen-lockfile` (`--ignore-scripts` when enabled) | `bun run` | `bun audit --production` |
+
+**Bun caller example (quality):**
+
+```yaml
+jobs:
+  quality:
+    uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA # v0.x.y
+    with:
+      package-manager: bun
+      bun-version-file: .bun-version
+      check-npm-script: check
+```
+
+**Documented limitations when using `bun`:**
+
+- **`sonarqube-cloud-node.yml`:** Only install and the coverage script use Bun; Sonar still reads `sonar-project.properties` in the caller (lcov/XML paths must match whatever `bun run <coverage-npm-script>` emits).
+- **`mutation-changed.yml`:** Pull-request mutation still shells out to `node_modules/.bin/stryker`; callers need Stryker and config compatible with Bun-installed `node_modules`.
+- **`node-setup-smoke.yml`:** Default `scenarios-json` includes `npm-package`; Bun repos should pass a trimmed list (for example `'["plugin","mcp","cli"]'`).
+
+Omit `package-manager` (or set `npm`) to keep existing npm behavior unchanged.
+
+This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit; same-repo `uses:`/`@{{ github.sha }}` fail actionlint/zizmor).
 
 ## Caller examples
 
@@ -339,6 +383,8 @@ jobs:
       npm-prefixes-json: '["packages/eslint-sonarjs"]'
 ```
 
+Bun monorepo (for example lunch-money, vakt): add `package-manager: bun` and, when present, `bun-version-file: .bun-version`. Keep `check-npm-script` and other script inputs as the `package.json` script name (executed with `bun run`).
+
 `npm-ci-ignore-scripts` defaults to `true` (org standard). Adopt `--ignore-scripts` on fleet migration unless a documented install script must run. Prefer a caller `.nvmrc` over a new `node-version` input; homeexchange-mcp should add `.nvmrc` in its migration PR rather than requiring a parallel version pin input.
 
 ### Mutation (Stryker, changed src)
@@ -374,6 +420,34 @@ jobs:
   setup-smoke:
     uses: osloer-industries/.github/.github/workflows/node-setup-smoke.yml@REUSABLES_SHA # v0.x.y
 ```
+
+### AGENTS.md lint (opt-in fleet desloppify)
+
+Deterministic checks on `AGENTS.md`: shared markdownlint config (no inline disables; target linted from `$RUNNER_TEMP`), line/word budget, filler warnings and emoji errors, cited package scripts, backtick repo paths, versioned org **Agent workflow** block (markers + whitespace-normalised body), and tracked forbidden instruction files (`git ls-files` denylist). No LLM calls.
+
+**Caller setup:** embed the marked region from `.github/agents-org-workflow-block.md` at the reusables pin into the repository root `AGENTS.md`, including `org-agent-workflow` start/end markers and matching version. Adopt the reusable only together with per-repo fixes so the first run is green (no fleet repo passes at current pins without reconciling block, paths, and scripts).
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `agents-path` | `AGENTS.md` | Path to agent instructions |
+| `job-name` | `AGENTS.md lint` | Check name |
+| `require-org-workflow-block` | `true` | Enforce embedded org block |
+| `max-lines` | `220` | Line budget |
+| `max-words` | `3500` | Word budget |
+
+```yaml
+jobs:
+  agents-md-lint:
+    uses: osloer-industries/.github/.github/workflows/agents-md-lint.yml@REUSABLES_SHA # v0.x.y
+
+  ci-passed:
+    needs:
+      # …other jobs…
+      - agents-md-lint
+    # …
+```
+
+When a reusables pin bumps the block version, update the marked region (and marker version) in `AGENTS.md`; the gate prints a unified diff on drift. Pair Dependabot org-reusables bumps with that sync in the same PR.
 
 ### Auto-merge (Dependabot and Release Please)
 

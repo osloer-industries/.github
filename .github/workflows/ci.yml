@@ -59,6 +59,29 @@ jobs:
       - name: Assert Release Please app tokens request required permissions
         run: node --experimental-strip-types .github/scripts/assert-release-please-app-token-permissions.ts
 
+  dot-github-tooling:
+    name: dot-github tooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: .github/package-lock.json
+      - name: Typecheck and lint org scripts
+        working-directory: .github
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run check
+          npm run lint:md:config
+
   sonarcloud-zero-issues-unit:
     name: SonarCloud zero issues unit tests
     runs-on: ubuntu-latest
@@ -116,6 +139,187 @@ jobs:
         run: node --test .github/scripts/test-ci-passed-gate.test.ts
       - name: Run ci-passed workflow contract tests
         run: node --test .github/scripts/test-assert-ci-passed-workflow.test.ts
+
+  package-manager-unit:
+    name: Package manager unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Run package manager unit tests
+        run: node --test .github/scripts/test-package-manager.test.ts
+      - name: Reject invalid package-manager values
+        run: |
+          set -euo pipefail
+          set +e
+          PACKAGE_MANAGER=pnpm node .github/actions/package-manager/package-manager.ts validate
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::Expected package-manager validate to fail for pnpm"
+            exit 1
+          fi
+
+  # Mirrors node-npm-quality.yml / node-setup-smoke.yml (same steps; ${{ github.sha }} stands in for job.workflow_sha on self-call).
+  package-manager-reusable-quality-smoke:
+    name: Reusable quality smoke (${{ matrix.package-manager }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package-manager: npm
+            fixture: test-fixtures/package-manager-smoke/npm
+          - package-manager: bun
+            fixture: test-fixtures/package-manager-smoke/bun
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.package-manager == 'npm'
+        with:
+          node-version-file: ${{ matrix.fixture }}/.nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.fixture }}/package-lock.json
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.package-manager == 'bun'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ github.sha }}
+          path: reusables-pm
+          sparse-checkout: .github/actions/package-manager/package-manager.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Install dependencies
+        env:
+          PACKAGE_MANAGER: ${{ matrix.package-manager }}
+          NPM_CI_IGNORE_SCRIPTS: "true"
+          WORKING_DIRECTORY: ${{ matrix.fixture }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" validate
+          "$runner" "$pm" install
+      - name: Audit production dependencies
+        env:
+          PACKAGE_MANAGER: ${{ matrix.package-manager }}
+          AUDIT_LEVEL: high
+          WORKING_DIRECTORY: ${{ matrix.fixture }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" audit
+      - name: Run check
+        env:
+          PACKAGE_MANAGER: ${{ matrix.package-manager }}
+          NPM_SCRIPT: check
+          WORKING_DIRECTORY: ${{ matrix.fixture }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" run
+
+  package-manager-reusable-setup-smoke:
+    name: Reusable setup smoke (${{ matrix.package-manager }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package-manager: npm
+            fixture: test-fixtures/package-manager-smoke/npm
+          - package-manager: bun
+            fixture: test-fixtures/package-manager-smoke/bun
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.package-manager == 'npm'
+        with:
+          node-version-file: ${{ matrix.fixture }}/.nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.fixture }}/package-lock.json
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.package-manager == 'bun'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ github.sha }}
+          path: reusables-pm
+          sparse-checkout: .github/actions/package-manager/package-manager.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Install dependencies
+        env:
+          PACKAGE_MANAGER: ${{ matrix.package-manager }}
+          WORKING_DIRECTORY: ${{ matrix.fixture }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" validate
+          NPM_CI_IGNORE_SCRIPTS=true "$runner" "$pm" install
+      - name: Run setup scenario
+        env:
+          PACKAGE_MANAGER: ${{ matrix.package-manager }}
+          NPM_SCRIPT: setup
+          RUN_ARGS: --scenario cli --name @smoke/cli-template --yes
+          WORKING_DIRECTORY: ${{ matrix.fixture }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables-pm/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" run
+
+  agents-md-lint-unit:
+    name: AGENTS.md lint unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Run AGENTS.md lint unit tests
+        run: node --experimental-strip-types --test .github/scripts/test-agents-md-lint.test.ts
 
   mutation-changed-unit:
     name: Mutation changed unit tests
@@ -217,6 +421,11 @@ jobs:
       - sonarcloud-zero-issues-unit
       - reusable-workflow-triggers-unit
       - auto-merge-unit
+      - package-manager-unit
+      - package-manager-reusable-quality-smoke
+      - package-manager-reusable-setup-smoke
+      - dot-github-tooling
+      - agents-md-lint-unit
       - mutation-changed-unit
       - zizmor-fail-closed-self-test
     if: always()

@@ -1,0 +1,12 @@
+{
+  "name": "pm-smoke-bun",
+  "private": true,
+  "scripts": {
+    "check": "echo ok",
+    "smoke": "echo ok",
+    "setup": "node setup-smoke.mjs"
+  },
+  "dependencies": {
+    "is-odd": "3.0.1"
+  }
+}

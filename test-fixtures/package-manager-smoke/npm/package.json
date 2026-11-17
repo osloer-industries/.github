@@ -1,0 +1,9 @@
+{
+  "name": "pm-smoke-npm",
+  "private": true,
+  "scripts": {
+    "check": "node -e \"process.exit(0)\"",
+    "smoke": "node -e \"process.exit(0)\"",
+    "setup": "node setup-smoke.mjs"
+  }
+}

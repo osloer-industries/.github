@@ -16,3 +16,15 @@ paths:
   .github/workflows/ci-passed.yml:
     ignore:
       - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/node-npm-quality.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/node-setup-smoke.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/sonarqube-cloud-node.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/agents-md-lint.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'

@@ -1,5 +1,9 @@
 name: Reusable — Stryker mutation (changed src)
 
+# package-manager: bun installs and runs the full mutation script with bun; pull-request runs still
+# invoke Stryker from node_modules/.bin/stryker. Callers must ship a Stryker config and scripts that
+# work under the chosen package manager.
+
 on:
   workflow_call:
     inputs:
@@ -7,6 +11,14 @@ on:
         description: Node version file in the caller repository
         type: string
         default: .nvmrc
+      package-manager:
+        description: Package manager for install and full mutation script (npm or bun; default npm).
+        type: string
+        default: npm
+      bun-version-file:
+        description: Optional Bun version file when package-manager is bun.
+        type: string
+        default: ""
       full-npm-script:
         description: npm script for full src/ mutation on default-branch pushes
         type: string
@@ -33,27 +45,59 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.package-manager == 'npm'
         with:
           node-version-file: ${{ inputs.node-version-file }}
           cache: npm
-      - run: npm ci --ignore-scripts
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: inputs.package-manager == 'bun'
+        with:
+          bun-version-file: ${{ inputs.bun-version-file }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'pull_request'
         with:
           repository: osloer-industries/.github
           ref: ${{ job.workflow_sha }}
           path: reusables
-          sparse-checkout: .github/scripts/run-mutation-changed.ts
+          sparse-checkout: |
+            .github/scripts
+            .github/actions/package-manager
           sparse-checkout-cone-mode: true
           persist-credentials: false
+      - name: Install dependencies
+        env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" validate
+          NPM_CI_IGNORE_SCRIPTS=true "$runner" "$pm" install
       - name: Mutation (changed src on pull request)
         if: github.event_name == 'pull_request'
         env:
           MUTATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
           MUTATION_REPO_ROOT: ${{ github.workspace }}
-        run: node reusables/.github/scripts/run-mutation-changed.ts
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          "$runner" reusables/.github/scripts/run-mutation-changed.ts
       - name: Mutation (full src on default branch)
         if: github.event_name == 'push'
         env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
           NPM_SCRIPT: ${{ inputs.full-npm-script }}
-        run: npm run "$NPM_SCRIPT"
+        run: |
+          set -euo pipefail
+          runner="node"
+          if [ "$PACKAGE_MANAGER" = "bun" ]; then
+            runner="bun"
+          fi
+          pm="reusables/.github/actions/package-manager/package-manager.ts"
+          "$runner" "$pm" run
