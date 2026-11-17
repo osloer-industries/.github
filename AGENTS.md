@@ -48,11 +48,12 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 - Like `workflow-security.yml`, `agents-md-lint.yml` also lists `pull_request` / `push` to `main` so this repository exercises
   the reusable without a same-repo `uses: ./…` caller in `ci.yml`.
-- Cross-repo reusable workflows **inline** large TypeScript gates where checkout is unsafe
-  (`.github/scripts/codeql-gate-inline.ts`, `.github/scripts/zizmor-thresholds-inline.ts`).
+- Cross-repo reusable workflows **inline** large TypeScript gates only where checkout is unsafe
+  (`.github/scripts/zizmor-thresholds-inline.ts` in `workflow-security.yml`).
 - Workflows that sparse-checkout org scripts (`sonarcloud-zero-issues.yml`, `mutation-changed.yml`, `ci-passed.yml`,
-  `auto-merge.yml`, `agents-md-lint.yml`) must checkout at **`${{ job.workflow_sha }}`** (the commit in the caller’s
-  `uses:` pin; not `github.workflow_sha`, which is the caller workflow).
+  `auto-merge.yml`, `agents-md-lint.yml`, `codeql-javascript-typescript.yml`) must checkout at
+  **`${{ job.workflow_sha }}`** (the commit in the caller’s `uses:` pin; not `github.workflow_sha`, which is the caller
+  workflow).
 - CI enforces via `.github/scripts/assert-reusables-script-checkout.ts`; optional manual smoke via
   `.github/workflows/reusables-job-context-smoke.yml`.
 - Canonical org Agent workflow block for fleet drift checks: `.github/agents-org-workflow-block.md` (markers + body; gate
@@ -99,6 +100,15 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
   markers; major bumps → label `release:major-hold` for manual merge — majors never auto-merge).
 - Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks)
   is green.
+
+## CodeQL (JavaScript and TypeScript)
+
+- Workflow: `.github/workflows/codeql-javascript-typescript.yml` (`workflow_call`).
+- Canonical script: `.github/scripts/codeql-sarif-security-gate.ts` (sparse checkout at `job.workflow_sha` when
+  `code-scanning-upload` is false).
+- Stable default check name: job **`Analyze JavaScript and TypeScript`**.
+- After editing the script, unit tests run in `.github/workflows/codeql-gate-ci.yml` (fixture unit tests and live
+  vulnerable-fixture gate).
 
 ## Mutation (changed src)
 

@@ -24,8 +24,6 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      - name: Verify inline gate matches canonical script
-        run: node .github/scripts/codeql-gate-inline.ts --check
       - name: Run gate fixture tests
         run: node --test .github/scripts/test-codeql-sarif-security-gate.test.ts
 
@@ -90,8 +88,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      - name: Enforce security findings threshold (shipped inline gate)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ github.sha }}
+          path: reusables
+          sparse-checkout: .github/scripts/codeql-sarif-security-gate.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Enforce security findings threshold (reusable sparse-checkout path)
         env:
           FAIL_ON_SARIF_LEVEL: error
           SARIF_DIR: codeql-sarif
-        run: node .github/scripts/run-shipped-codeql-gate.ts
+        run: node reusables/.github/scripts/codeql-sarif-security-gate.ts
