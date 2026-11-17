@@ -565,7 +565,7 @@ Requires `contents: read` and `actions: read` on the called job (private repos a
 
 **Bumping zizmor CLI** (not managed by Dependabot): Dependabot’s `github-actions` updates can bump the `zizmorcore/zizmor-action@…` SHA only. After any action SHA bump, set the `version:` input on the Run zizmor step to an **exact** release that exists under `support/locks/zizmor-<version>.txt` in that action ref ([releases](https://github.com/zizmorcore/zizmor/releases)). Do not use `latest` or leave `version` unset — CI fails closed via `.github/scripts/assert-zizmor-action-pin.ts`.
 
-This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.12** does not yet accept GitHub’s `$/` self-repository `uses:` form, while zizmor flags `./` for local reusables).
+This repository also lists `pull_request` / `push` on `workflow-security.yml` so the gate runs on every change here without a same-repo `workflow_call` (actionlint **v1.7.13+** still does not accept GitHub’s `$/` same-repository `uses:` form, while zizmor flags `./` for local reusables). Reusable workflows sparse-checkout org scripts at **`job.workflow_sha`**; pin actionlint **v1.7.13** (adds the documented `job.workflow_*` context properties per [rhysd/actionlint#707](https://github.com/rhysd/actionlint/pull/707)) so `.github/actionlint.yaml` path ignores are not needed.
 
 ```yaml
 name: CI
