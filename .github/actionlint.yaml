@@ -28,3 +28,6 @@ paths:
   .github/workflows/agents-md-lint.yml:
     ignore:
       - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/codeql-javascript-typescript.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'

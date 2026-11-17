@@ -220,11 +220,11 @@ Download the `codeql-sarif-*` workflow artifact for the full SARIF when triaging
 
 Default `queries` is `security-and-quality`. Callers that previously inlined `security-extended` should pass `queries: security-extended` only when that broader query suite is documented for the repo (e.g. coast-fire-visualizer migration).
 
-The security gate is **inlined in the reusable workflow** (a `run:` step that writes an embedded TypeScript heredoc to a temp file and runs it with Node 24), so it always executes from the same commit the caller pins—no checkout of this repository and no caller-local action path. The editable source of truth is `.github/scripts/codeql-sarif-security-gate.ts`; CI fails if that file and the inline copy diverge (`node .github/scripts/codeql-gate-inline.ts --check`). After editing the script, run `node .github/scripts/codeql-gate-inline.ts --write` before committing.
+The security gate runs `.github/scripts/codeql-sarif-security-gate.ts` after a sparse checkout of `osloer-industries/.github` at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin), so consumers execute the same script this repository tests—no caller-local copy.
 
 The gate resolves CodeQL rules from the SARIF driver and query-pack extensions, honors `result.rule` index references, and falls back to each rule’s `defaultConfiguration.level` when a result omits `level`. Missing SARIF files or unparseable SARIF fails the job.
 
-This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures, runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and mirrors the reusable artifact-mode steps on `test-fixtures/codeql-smoke` using the shipped inline gate (`run-shipped-codeql-gate.ts`). A cross-repository `workflow_call` smoke test is not run in this repo’s CI; verify that separately on a consumer such as `lunch-money` after bumping the reusables SHA.
+This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures (`run-shipped-codeql-gate.ts`), runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and mirrors the reusable artifact-mode steps on `test-fixtures/codeql-smoke` via the same sparse-checkout path. A cross-repository `workflow_call` smoke test is not run in this repo’s CI; verify that separately on a consumer such as `lunch-money` after bumping the reusables SHA.
 
 ### Dependency review
 
