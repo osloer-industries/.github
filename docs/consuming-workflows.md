@@ -55,7 +55,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | --- | --- | --- |
 | `semantic-pull-request.yml` | Semantic pull request | `pull_request_target` (types: opened, reopened, edited, synchronize) |
 | `codeql-javascript-typescript.yml` | Analyze JavaScript and TypeScript | `pull_request`, `push` to default branch, optional weekly `schedule` |
-| `dependency-review.yml` | Review dependency changes (public); Review dependency changes / osv-scan (private `auto`) | `pull_request` |
+| `dependency-review.yml` | Review dependency changes | `pull_request` |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
@@ -236,12 +236,14 @@ Input **`mode`** (default **`auto`**) picks the backend via **separate jobs** (n
 | `github` | Always dependency-review-action (`fail-on-severity` input, default `high`). |
 | `osv` | Always OSV-Scanner PR reusable (same GHAS-free settings). |
 
-**Required status check names** (list the one that matches your visibility; only one job runs per PR):
+**Required status check:** **`Review dependency changes`** (both public GitHub Dependency Review and private OSV paths).
 
-| Path | GitHub check name |
-| --- | --- |
-| `github` / `auto` on a **public** repo | `Review dependency changes` |
-| `osv` / `auto` on a **private** repo | `Review dependency changes / osv-scan` |
+**Private OSV SARIF (no Code Scanning upload):** The nested Google reusable runs with `upload-sarif: false` and `fail-on-vuln: false` so scan artifacts are always produced. The org follow-up job:
+
+1. Re-uploads SARIF as **`osv-sarif-${{ github.run_id }}`** (`actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` — same pin as CodeQL artifact mode).
+2. Runs **`osv-reporter-action`** with `fail-on-vuln: true` (the required check outcome).
+
+The nested job also uploads **`OSV Scanner SARIF file`** (default `results.sarif`, **5-day** retention). Prefer **`osv-sarif-*`** on the workflow run for fleet-consistent triage (mirrors **`codeql-sarif-*`**).
 
 OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockfiles present in the caller tree — including npm **`package-lock.json`** and Bun **`bun.lock`**. No extra secrets.
 

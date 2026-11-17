@@ -105,8 +105,9 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
 - Private / `mode: osv` delegates to Google **osv-scanner-reusable-pr** (pin + `# v2.x.y` in
   `.github/workflows/dependency-review.yml`; `upload-sarif: false`, `fail-on-vuln: true`).
-- Check names: **`Review dependency changes`** (GitHub Dependency Review path); **`Review dependency changes /
-  osv-scan`** (OSV path — nested job; use this in rulesets for private repos).
+- Check names: **`Review dependency changes`** (github and private OSV paths). OSV SARIF for private repos:
+  workflow artifact **`osv-sarif-${{ github.run_id }}`** (org re-upload after nested scan); nested job also keeps
+  **`OSV Scanner SARIF file`** (5-day retention).
 
 ## Mutation (changed src)
 

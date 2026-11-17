@@ -53,8 +53,9 @@ jobs:
         with:
           fail-on-severity: ${{ inputs.fail-on-severity }}
 
+  # fail-on-vuln: false so Google’s workflow always uploads SARIF/JSON artifacts; enforcement is in review-dependency-changes-osv.
   osv-dependency-review:
-    name: Review dependency changes
+    name: OSV PR scan
     if: >-
       ${{ inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true) }}
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
@@ -63,4 +64,47 @@ jobs:
       actions: read
     with:
       upload-sarif: false
-      fail-on-vuln: true
+      fail-on-vuln: false
+
+  review-dependency-changes-osv:
+    name: Review dependency changes
+    needs: osv-dependency-review
+    if: >-
+      always() &&
+      needs.osv-dependency-review.result != 'skipped' &&
+      (inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Download OSV PR scan SARIF (nested reusable)
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: OSV Scanner SARIF file
+          path: osv-sarif
+      - name: Upload OSV SARIF artifact (private repos, no Code Scanning)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: osv-sarif-${{ github.run_id }}
+          path: osv-sarif/
+          if-no-files-found: error
+      - name: Download OSV JSON scan results
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: old-json-results
+          path: osv-json
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: new-json-results
+          path: osv-json
+      - name: Enforce new vulnerabilities (OSV reporter)
+        uses: google/osv-scanner-action/osv-reporter-action@0e457b42d0120153c352875e9b758b1e5c58c7e5 # v2.7.1
+        with:
+          scan-args: |-
+            --output=osv-sarif/results.sarif
+            --old=osv-json/old-results.json
+            --new=osv-json/new-results.json
+            --gh-annotations=true
+            --fail-on-vuln=true
