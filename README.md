@@ -18,6 +18,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [mutation-changed.yml](.github/workflows/mutation-changed.yml) | Stryker on changed `src/` for PRs; full mutation script on default-branch push |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
+| [agents-md-lint.yml](.github/workflows/agents-md-lint.yml) | AGENTS.md lint (markdownlint, org workflow block, forbidden instruction files) |
 | [auto-merge.yml](.github/workflows/auto-merge.yml) | Approve and enable `gh pr merge --auto` for Dependabot patch/minor and Release Please patch/minor (non-breaking); major or breaking releases get `release:major-hold` for manual merge |
 | [ci-passed.yml](.github/workflows/ci-passed.yml) | Final aggregate job: fail unless every `needs` job succeeded (`if: always()`) |
 
@@ -29,7 +30,7 @@ Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (de
 
 ### SonarCloud zero open issues
 
-SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, then fails when `issueStatuses=OPEN,CONFIRMED` is non-zero. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, waits for the compute engine to finish, then requires a stable `api/issues/search` snapshot before failing on non-zero `issueStatuses=OPEN,CONFIRMED`. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 ### Mutation (changed src)
 

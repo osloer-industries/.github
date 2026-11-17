@@ -1,0 +1,5 @@
+{
+  "noInlineConfig": true,
+  "config": ".markdownlint.json",
+  "ignores": ["**/node_modules/**"]
+}

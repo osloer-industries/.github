@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/osloer-industries/.github/compare/v0.1.3...v0.1.4) (2026-11-16)
+
+
+### Features
+
+* reusable AGENTS.md lint gate for fleet desloppify ([#44](https://github.com/osloer-industries/.github/issues/44)) ([ef88323](https://github.com/osloer-industries/.github/commit/ef88323a9f2a72a17de8d5245239758610b575b1))
+
 ## [0.1.3](https://github.com/osloer-industries/.github/compare/v0.1.2...v0.1.3) (2026-11-16)
 
 
