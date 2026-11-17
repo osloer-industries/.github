@@ -15,7 +15,7 @@ on:
         type: string
         default: high
       timeout-minutes:
-        description: Job timeout
+        description: Job timeout (github-dependency-review job; OSV nested reusable has no timeout input)
         type: number
         default: 10
 
@@ -57,7 +57,6 @@ jobs:
     name: Review dependency changes
     if: >-
       ${{ inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true) }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
     permissions:
       contents: read

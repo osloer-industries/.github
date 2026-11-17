@@ -103,9 +103,8 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 ## Dependency review (GHAS-free OSV on private)
 
 - Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
-- Private / `mode: osv` delegates to
-  `google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml` (pinned commit + `# v2.x.y` comment;
-  `upload-sarif: false`, `fail-on-vuln: true`).
+- Private / `mode: osv` delegates to Google **osv-scanner-reusable-pr** (pin + `# v2.x.y` in
+  `.github/workflows/dependency-review.yml`; `upload-sarif: false`, `fail-on-vuln: true`).
 - Check names: **`Review dependency changes`** (GitHub Dependency Review path); **`Review dependency changes /
   osv-scan`** (OSV path — nested job; use this in rulesets for private repos).
 
