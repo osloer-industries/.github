@@ -100,6 +100,15 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - Org rulesets should require only **`ci-passed`**; auto-merge completes once that check (and any other required checks)
   is green.
 
+## Dependency review (GHAS-free audit)
+
+- Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
+- Canonical script: `.github/scripts/dependency-diff-audit.ts` (sparse checkout at `job.workflow_sha` when
+  `mode` is `audit`, or when `mode: auto` on a private repository).
+- Stable job check name: **`Review dependency changes`**. Input `mode` defaults to `auto` (GitHub Dependency Review on
+  public repos; npm audit diff on private repos).
+- After editing the script, unit tests run in `.github/workflows/ci.yml` (`Dependency diff audit unit tests`).
+
 ## Mutation (changed src)
 
 - Workflow: `.github/workflows/mutation-changed.yml` (`workflow_call`).

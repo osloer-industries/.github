@@ -10,7 +10,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | --- | --- |
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
-| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
+| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (`mode: auto` — GitHub on public repos, npm audit diff on private) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please (reusable) |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
@@ -26,6 +26,10 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs an inlined TypeScript gate (Node 24, no npm install in callers). Source of truth: [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts). Keep the inline copy in the workflow synchronized with `node .github/scripts/codeql-gate-inline.ts --write` / `--check`. Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml). This repository’s [`ci.yml`](.github/workflows/ci.yml) also runs `codeql-gate-inline.ts --check` on every PR/push so drift is caught outside the CodeQL gate workflow.
 
 Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (default empty — report all findings). Invalid values fail closed. See [docs/consuming-workflows.md](docs/consuming-workflows.md).
+
+### Dependency review (GHAS-free on private repos)
+
+Reusable [`dependency-review.yml`](.github/workflows/dependency-review.yml) keeps the check name **Review dependency changes**. Input `mode` defaults to `auto`: **public** repositories use GitHub’s [dependency-review-action](https://github.com/actions/dependency-review-action); **private** repositories run the org npm audit diff gate (no GHAS). Override with `mode: github` or `mode: audit`. Audit script: [`.github/scripts/dependency-diff-audit.ts`](.github/scripts/dependency-diff-audit.ts), checked out at **`job.workflow_sha`**.
 
 ### SonarCloud zero open issues
 

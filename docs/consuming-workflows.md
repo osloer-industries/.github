@@ -55,7 +55,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | --- | --- | --- |
 | `semantic-pull-request.yml` | Semantic pull request | `pull_request_target` (types: opened, reopened, edited, synchronize) |
 | `codeql-javascript-typescript.yml` | Analyze JavaScript and TypeScript | `pull_request`, `push` to default branch, optional weekly `schedule` |
-| `dependency-review.yml` | Review dependency changes | `pull_request` |
+| `dependency-review.yml` | Review dependency changes | `pull_request` (npm lockfile required for audit mode) |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
@@ -228,6 +228,18 @@ This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SAR
 
 ### Dependency review
 
+The reusable job name stays **Review dependency changes**. Input **`mode`** (default **`auto`**) picks the backend:
+
+| `mode` | Behavior |
+| --- | --- |
+| `auto` | GitHub [dependency-review-action](https://github.com/actions/dependency-review-action) on **public** repos; npm audit diff on **private** repos (no GHAS). |
+| `github` | Always use dependency-review-action (`fail-on-severity` input, default `high`). |
+| `audit` | Always use the org npm audit diff gate (`.github/scripts/dependency-diff-audit.ts` at `job.workflow_sha`). |
+
+**Public** repos (template, homeexchange-mcp, vakt, de-invest-sync): use the default caller below — no extra inputs.
+
+**Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects audit mode automatically. Remove vendored `dependency-diff-audit.mjs` when migrating off a local copy.
+
 ```yaml
 name: Dependency review
 
@@ -246,7 +258,17 @@ jobs:
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
-**Do not** replace [lunch-money-de-invest-sync](https://github.com/osloer-industries/lunch-money-de-invest-sync)’s GHAS-free `dependency-diff-audit.mjs` gate with this reusable. **Private** repos (e.g. coast-fire-visualizer): confirm the official dependency review action is available without paid GHAS before adding this caller; otherwise keep a local GHAS-free gate.
+Explicit npm audit diff (optional — same as `auto` on a private repo):
+
+```yaml
+jobs:
+  review:
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
+    with:
+      mode: audit
+```
+
+Audit mode runs `npm ci` on the caller, compares `npm audit --omit=dev` advisories at the PR head vs the pull request base SHA, and fails on newly introduced **high** or **critical** advisories (aligned with `fail-on-severity: high` on GitHub’s action). Callers need `package.json`, `package-lock.json`, and a `.nvmrc` (override with `node-version-file` if needed). No extra secrets.
 
 ### Release Please
 

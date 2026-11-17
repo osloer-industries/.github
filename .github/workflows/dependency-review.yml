@@ -3,24 +3,99 @@ name: Reusable — dependency review
 on:
   workflow_call:
     inputs:
+      mode:
+        description: >
+          Dependency gate backend. auto uses GitHub Dependency Review on public
+          repositories and npm audit diff on private repos (no GHAS). github
+          forces Dependency Review. audit forces npm audit diff vs merge base.
+        type: string
+        default: auto
       fail-on-severity:
-        description: Minimum severity that fails the check
+        description: Minimum severity that fails the check (github mode only)
         type: string
         default: high
+      node-version-file:
+        description: Node version file in the caller repository (audit mode)
+        type: string
+        default: .nvmrc
       timeout-minutes:
         description: Job timeout
         type: number
-        default: 5
+        default: 10
 
 jobs:
   review:
     name: Review dependency changes
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
     steps:
+      - id: resolve-mode
+        env:
+          MODE_INPUT: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          case "$MODE_INPUT" in
+            auto)
+              if [ "${{ github.event.repository.private }}" = "true" ]; then
+                EFFECTIVE=audit
+              else
+                EFFECTIVE=github
+              fi
+              ;;
+            github|audit)
+              EFFECTIVE=$MODE_INPUT
+              ;;
+            *)
+              echo "::error::Invalid dependency-review mode '$MODE_INPUT' (expected auto, github, or audit)"
+              exit 1
+              ;;
+          esac
+          echo "effective=$EFFECTIVE" >> "$GITHUB_OUTPUT"
+          echo "Dependency review mode: $EFFECTIVE (input=$MODE_INPUT)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+          fetch-depth: 0
+      - name: GitHub Dependency Review
+        if: steps.resolve-mode.outputs.effective == 'github'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: ${{ inputs.fail-on-severity }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.resolve-mode.outputs.effective == 'audit'
+        with:
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: npm
+      - name: Install caller dependencies
+        if: steps.resolve-mode.outputs.effective == 'audit'
+        run: npm ci --ignore-scripts
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.resolve-mode.outputs.effective == 'audit'
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables
+          sparse-checkout: .github/scripts/dependency-diff-audit.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - id: tool-paths
+        if: steps.resolve-mode.outputs.effective == 'audit'
+        env:
+          PATH: /usr/local/bin:/usr/bin:/bin
+        run: |
+          set -euo pipefail
+          {
+            echo "node_bin=$(command -v node)"
+            echo "npm_cli=$(command -v npm)"
+            echo "git_bin=$(command -v git)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Block new high-severity npm advisories (GHAS-free dependency gate)
+        if: steps.resolve-mode.outputs.effective == 'audit'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+          NODE_BIN: ${{ steps.tool-paths.outputs.node_bin }}
+          NPM_CLI: ${{ steps.tool-paths.outputs.npm_cli }}
+          GIT_BIN: ${{ steps.tool-paths.outputs.git_bin }}
+        run: node reusables/.github/scripts/dependency-diff-audit.ts
