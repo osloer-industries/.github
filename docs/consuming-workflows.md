@@ -99,6 +99,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
 | `sonarcloud-zero-issues.yml` | `issues-settle-polls` | `3` | Consecutive matching open-issue API pages before enforcing zero issues |
 | `sonarcloud-zero-issues.yml` | `issues-min-polls` | `3` | Minimum issue API polls before a stable empty snapshot can pass |
+| `sonarcloud-zero-issues.yml` | `ce-task-id` | *(empty)* | Sonar `ceTaskId` from `report-task.txt` (`sonarqube-cloud-node.yml` job output `ce-task-id`); polls `api/ce/task` until SUCCESS |
 | `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
 | `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
@@ -139,7 +140,7 @@ jobs:
 
 Omit `package-manager` (or set `npm`) to keep existing npm behavior unchanged.
 
-This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit; same-repo `uses:`/`@{{ github.sha }}` fail actionlint/zizmor).
+This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit). Same-repo `workflow_call` with `uses: ./…` fails zizmor `self-repository`; `${{ github.sha }}` in `uses:` fails actionlint — so **Sonar zero open issues** is an **inlined** job in `ci.yml`, and **auto-merge** lists `pull_request` on the reusable workflow (no thin caller).
 
 ## Caller examples
 
@@ -251,14 +252,20 @@ OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockf
 
 **Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects OSV automatically. Drop vendored `dependency-diff-audit.mjs` when migrating.
 
+**Caller job permissions (required):** Grant these on the job that `uses:` the reusable (not workflow-wide unless that job is the only job). GitHub validates nested reusables at workflow startup; `mode: auto` on a **public** repo still requires `security-events: write` because the nested Google OSV job is declared.
+
+| Permission | Why |
+| --- | --- |
+| `contents: read` | Checkout and dependency diff |
+| `actions: read` | Download nested workflow artifacts |
+| `pull-requests: read` | OSV follow-up job metadata |
+| `security-events: write` | Nested Google `osv-scan` (even when `upload-sarif: false`) |
+
 ```yaml
 name: Dependency review
 
 on:
   pull_request:
-
-permissions:
-  contents: read
 
 concurrency:
   group: dependency-review-${{ github.workflow }}-${{ github.ref }}
@@ -266,6 +273,11 @@ concurrency:
 
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
@@ -274,6 +286,11 @@ Explicit OSV (optional — same as `auto` on a private repo):
 ```yaml
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
     with:
       mode: osv
@@ -377,11 +394,13 @@ jobs:
   zero-open-issues:
     needs: analyze
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
+    with:
+      ce-task-id: ${{ needs.analyze.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
+Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate waits until the head commit appears on `api/project_pull_requests/list` **and** a pull-request REPORT compute-engine task reaches **SUCCESS** (via `api/ce/activity` / `api/ce/task`).
 
 Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). No extra inputs such as `reusables-ref` are required.
 
@@ -520,7 +539,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
-`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s caller [`.github/workflows/auto-merge-caller.yml`](.github/workflows/auto-merge-caller.yml) uses `merge` because release tags are created from merge commits here.
+`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s [`.github/workflows/auto-merge.yml`](.github/workflows/auto-merge.yml) direct `pull_request` trigger uses merge method `merge` (via input fallback) because release tags are created from merge commits here.
 
 Rely on org rulesets / branch protection **required status checks** so auto-merge does not complete until every gate is green. In practice register only **`ci-passed`** as required (see below); auto-merge then waits for that single aggregate check.
 

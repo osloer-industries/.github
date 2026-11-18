@@ -1,5 +1,20 @@
 name: Reusable — dependency review
 
+# Caller job (the job that `uses:` this workflow) must grant at job level:
+#   contents: read, actions: read, pull-requests: read, security-events: write
+# GitHub validates nested reusables at workflow startup; `mode: auto` on a public repo
+# still requires security-events: write because the nested OSV job is declared.
+#
+# Minimal caller:
+#   jobs:
+#     review:
+#       permissions:
+#         contents: read
+#         actions: read
+#         pull-requests: read
+#         security-events: write
+#       uses: osloer-industries/.github/.github/workflows/dependency-review.yml@<sha> # v0.x.y
+
 on:
   workflow_call:
     inputs:
@@ -60,8 +75,9 @@ jobs:
       ${{ inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true) }}
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
     permissions:
-      contents: read
       actions: read
+      contents: read
+      security-events: write
     with:
       upload-sarif: false
       fail-on-vuln: false
