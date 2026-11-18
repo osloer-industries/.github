@@ -105,10 +105,10 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 - Workflow: `.github/workflows/dependency-review.yml` (`workflow_call`).
 - Private / `mode: osv` delegates to Google **osv-scanner-reusable-pr** (pin + `# v2.x.y` in
-  `.github/workflows/dependency-review.yml`; nested `upload-sarif: false`, `fail-on-vuln: false`; org follow-up enforces
+  `.github/workflows/dependency-review.yml`; nested `upload-sarif: false`, `fail-on-vuln: false`; gate job enforces
   with **osv-reporter-action** and uploads **`osv-sarif-${{ github.run_id }}`**).
-- Check name: **`Review dependency changes`** (github and private OSV paths). Nested job also uploads **`OSV Scanner SARIF
-  file`** (5-day retention).
+- Required check name: **`Review dependency changes`** only. Nested job display name **`OSV PR scan (private repos only)`**
+  (skipped on public repos). Nested job also uploads **`OSV Scanner SARIF file`** (5-day retention).
 - Caller job must grant **`contents: read`**, **`actions: read`**, **`pull-requests: read`**, and **`security-events: write`**
   (nested OSV `osv-scan` requires `security-events: write`; GitHub validates that at workflow startup even when `mode: auto`
   skips OSV on a public repo). See the reusable workflow header comment and `docs/consuming-workflows.md`.

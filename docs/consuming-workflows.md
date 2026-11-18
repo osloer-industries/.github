@@ -53,7 +53,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 
 | Workflow file | Check name(s) | Caller triggers |
 | --- | --- | --- |
-| `semantic-pull-request.yml` | Semantic pull request | `pull_request_target` (types: opened, reopened, edited, synchronize) |
+| `semantic-pull-request.yml` | Semantic pull request | `pull_request` (types: opened, reopened, edited, synchronize) |
 | `codeql-javascript-typescript.yml` | Analyze JavaScript and TypeScript | `pull_request`, `push` to default branch, optional weekly `schedule` |
 | `dependency-review.yml` | Review dependency changes | `pull_request` |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
@@ -150,7 +150,7 @@ This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** 
 name: Pull request title
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, edited, synchronize]
 
 permissions:
@@ -229,7 +229,7 @@ This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SAR
 
 ### Dependency review
 
-Input **`mode`** (default **`auto`**) picks the backend via **separate jobs** (nested reusables require job-level `uses:`):
+Input **`mode`** (default **`auto`**) picks the backend. The nested Google reusable stays on a dedicated job (GitHub requires job-level `uses:`). All enforcement runs in a single gate job named **`Review dependency changes`**.
 
 | `mode` | Behavior |
 | --- | --- |
@@ -237,9 +237,16 @@ Input **`mode`** (default **`auto`**) picks the backend via **separate jobs** (n
 | `github` | Always dependency-review-action (`fail-on-severity` input, default `high`). |
 | `osv` | Always OSV-Scanner PR reusable (same GHAS-free settings). |
 
-**Required status check:** **`Review dependency changes`** (both public GitHub Dependency Review and private OSV paths).
+**PR check names:**
 
-**Private OSV SARIF (no Code Scanning upload):** The nested Google reusable runs with `upload-sarif: false` and `fail-on-vuln: false` so scan artifacts are always produced. The org follow-up job:
+| Job name | When it appears |
+| --- | --- |
+| **Review dependency changes** | Always on valid modes — the required gate (GitHub Dependency Review, OSV reporter, or invalid-mode rejection). |
+| **OSV PR scan (private repos only)** | **Skipped** on public repos and on `mode: github`; **runs** on private / `mode: osv` before the gate job. |
+
+Invalid `mode` values fail closed inside **Review dependency changes** (no separate skipped job).
+
+**Private OSV SARIF (no Code Scanning upload):** The nested Google reusable runs with `upload-sarif: false` and `fail-on-vuln: false` so scan artifacts are always produced. The gate job:
 
 1. Re-uploads SARIF as **`osv-sarif-${{ github.run_id }}`** (`actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` — same pin as CodeQL artifact mode).
 2. Runs **`osv-reporter-action`** with `fail-on-vuln: true` (the required check outcome).
