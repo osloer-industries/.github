@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/osloer-industries/.github/compare/v0.1.5...v0.1.6) (2026-11-18)
+
+
+### Bug Fixes
+
+* **dependency-review:** grant security-events for nested OSV reusable ([#51](https://github.com/osloer-industries/.github/issues/51)) ([d8eb55c](https://github.com/osloer-industries/.github/commit/d8eb55c7e4ff6f7828ff671448b70fb86deb1cd1))
+
 ## [0.1.5](https://github.com/osloer-industries/.github/compare/v0.1.4...v0.1.5) (2026-11-17)
 
 
