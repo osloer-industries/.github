@@ -140,7 +140,7 @@ jobs:
 
 Omit `package-manager` (or set `npm`) to keep existing npm behavior unchanged.
 
-This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit; same-repo `uses:`/`@{{ github.sha }}` fail actionlint/zizmor).
+This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit). Same-repo `workflow_call` with `uses: ./…` fails zizmor `self-repository`; `${{ github.sha }}` in `uses:` fails actionlint — so **Sonar zero open issues** is an **inlined** job in `ci.yml`, and **auto-merge** lists `pull_request` on the reusable workflow (no thin caller).
 
 ## Caller examples
 
@@ -539,7 +539,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
-`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s caller [`.github/workflows/auto-merge-caller.yml`](.github/workflows/auto-merge-caller.yml) uses `merge` because release tags are created from merge commits here.
+`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s [`.github/workflows/auto-merge.yml`](.github/workflows/auto-merge.yml) direct `pull_request` trigger uses merge method `merge` (via input fallback) because release tags are created from merge commits here.
 
 Rely on org rulesets / branch protection **required status checks** so auto-merge does not complete until every gate is green. In practice register only **`ci-passed`** as required (see below); auto-merge then waits for that single aggregate check.
 

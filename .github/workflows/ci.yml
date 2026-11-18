@@ -327,9 +327,37 @@ jobs:
 
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
-    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@${{ github.sha }}
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    name: SonarCloud zero open issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Enforce zero open SonarCloud issues on pull request
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORGANIZATION: osloer-industries
+          SONAR_WAIT_TIMEOUT_MINUTES: "20"
+          SONAR_POLL_INTERVAL_SECONDS: "10"
+          SONAR_ISSUES_SETTLE_POLLS: "3"
+          SONAR_ISSUES_MIN_POLLS: "3"
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SONAR_TOKEN}" ]; then
+            echo "::error::SONAR_TOKEN secret is required for SonarCloud zero open issues. Configure a repository or organization Actions secret; the job must fail when it is missing."
+            exit 1
+          fi
+          node .github/scripts/sonarcloud-zero-issues.ts
 
   zizmor-fail-closed-self-test:
     name: zizmor fail-closed self-test
