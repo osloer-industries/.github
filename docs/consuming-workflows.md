@@ -251,14 +251,20 @@ OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockf
 
 **Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects OSV automatically. Drop vendored `dependency-diff-audit.mjs` when migrating.
 
+**Caller job permissions (required):** Grant these on the job that `uses:` the reusable (not workflow-wide unless that job is the only job). GitHub validates nested reusables at workflow startup; `mode: auto` on a **public** repo still requires `security-events: write` because the nested Google OSV job is declared.
+
+| Permission | Why |
+| --- | --- |
+| `contents: read` | Checkout and dependency diff |
+| `actions: read` | Download nested workflow artifacts |
+| `pull-requests: read` | OSV follow-up job metadata |
+| `security-events: write` | Nested Google `osv-scan` (even when `upload-sarif: false`) |
+
 ```yaml
 name: Dependency review
 
 on:
   pull_request:
-
-permissions:
-  contents: read
 
 concurrency:
   group: dependency-review-${{ github.workflow }}-${{ github.ref }}
@@ -266,6 +272,11 @@ concurrency:
 
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
@@ -274,6 +285,11 @@ Explicit OSV (optional — same as `auto` on a private repo):
 ```yaml
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
     with:
       mode: osv

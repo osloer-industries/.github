@@ -109,6 +109,9 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
   with **osv-reporter-action** and uploads **`osv-sarif-${{ github.run_id }}`**).
 - Check name: **`Review dependency changes`** (github and private OSV paths). Nested job also uploads **`OSV Scanner SARIF
   file`** (5-day retention).
+- Caller job must grant **`contents: read`**, **`actions: read`**, **`pull-requests: read`**, and **`security-events: write`**
+  (nested OSV `osv-scan` requires `security-events: write`; GitHub validates that at workflow startup even when `mode: auto`
+  skips OSV on a public repo). See the reusable workflow header comment and `docs/consuming-workflows.md`.
 
 ## CodeQL (JavaScript and TypeScript)
 

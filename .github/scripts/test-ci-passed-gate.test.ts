@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  DEPENDENCY_REVIEW_SMOKE_JOB_IDS,
   findNeedsFailures,
   parseNeedsJson,
   parseSonarZeroIssuesJobId,
@@ -47,6 +48,17 @@ test("rejects sonar-zero-open-issues failure on any event", () => {
   const needs = { "sonar-zero-open-issues": { result: "failure" } };
   assert.deepEqual(findNeedsFailures(needs, "push"), ["sonar-zero-open-issues: failure"]);
   assert.deepEqual(findNeedsFailures(needs, "pull_request"), ["sonar-zero-open-issues: failure"]);
+});
+
+test("allows dependency-review reusable smoke jobs skipped off pull_request", () => {
+  for (const jobId of DEPENDENCY_REVIEW_SMOKE_JOB_IDS) {
+    assert.deepEqual(findNeedsFailures({ [jobId]: { result: "skipped" } }, "push"), []);
+  }
+  for (const jobId of DEPENDENCY_REVIEW_SMOKE_JOB_IDS) {
+    assert.deepEqual(findNeedsFailures({ [jobId]: { result: "skipped" } }, "pull_request"), [
+      `${jobId}: skipped`,
+    ]);
+  }
 });
 
 test("does not allow arbitrary jobs skipped on push", () => {
