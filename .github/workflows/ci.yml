@@ -327,7 +327,7 @@ jobs:
 
   sonar-zero-open-issues:
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/sonarcloud-zero-issues.yml
+    uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@${{ github.sha }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 

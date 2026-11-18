@@ -364,6 +364,83 @@ export interface WaitOptions {
   now?: () => number;
 }
 
+async function waitForPullRequestAnalysisOnce(
+  config: SonarConfig,
+  fetchImpl: FetchLike,
+  sleepFn: (ms: number) => Promise<void>,
+  nowFn: () => number,
+): Promise<PullRequestAnalysis | null> {
+  if (nowFn() >= config.deadlineMs) {
+    return null;
+  }
+
+  const pullRequests = await listProjectPullRequests(config, fetchImpl);
+  const entry = findPullRequestForKey(pullRequests, config.pullRequestNumber);
+
+  const ceTasks = await fetchCeActivity(config, fetchImpl);
+  const failed = latestFailedCeForPullRequest(ceTasks, config.pullRequestNumber);
+  if (failed) {
+    const detail = failed.errorMessage?.trim() || "no error message";
+    throw new Error(
+      `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
+    );
+  }
+
+  if (entry && analysisMatchesHead(entry, config.headSha)) {
+    if (findSuccessfulReportCeTaskForPullRequest(ceTasks, config.pullRequestNumber)) {
+      console.log(
+        `SonarCloud PR #${config.pullRequestNumber} has a successful REPORT compute-engine task for commit ${config.headSha}.`,
+      );
+      return entry;
+    }
+
+    const taskId =
+      config.ceTaskId ?? findCeTaskIdForPullRequest(ceTasks, config.pullRequestNumber);
+    if (taskId) {
+      const detail = await fetchCeTask(config, taskId, fetchImpl);
+      const status = detail.task?.status;
+      if (normalizeCeStatus(status) === "SUCCESS") {
+        console.log(
+          `SonarCloud compute-engine task ${taskId} succeeded for PR #${config.pullRequestNumber} at commit ${config.headSha}.`,
+        );
+        return entry;
+      }
+      if (isTerminalCeStatus(status)) {
+        assertCeTaskSucceeded(
+          config.pullRequestNumber,
+          status,
+          detail.task?.errorMessage,
+        );
+      }
+      console.log(
+        `SonarCloud compute-engine task ${taskId} status is ${status ?? "unknown"}; waiting for SUCCESS.`,
+      );
+    } else if (hasInProgressCeForPullRequest(ceTasks, config.pullRequestNumber)) {
+      console.log(
+        `SonarCloud PR #${config.pullRequestNumber} head commit is registered but compute engine is still running.`,
+      );
+    } else {
+      console.log(
+        `SonarCloud PR #${config.pullRequestNumber} head commit ${config.headSha} is registered; waiting for compute-engine SUCCESS before reading issues.`,
+      );
+    }
+  }
+
+  if (entry) {
+    const seenSha = entry.commit?.sha ?? "(none)";
+    console.log(
+      `Waiting for SonarCloud to finish analysing head ${config.headSha}; latest PR analysis commit is ${seenSha}.`,
+    );
+  } else {
+    console.log(
+      `Waiting for SonarCloud to register pull request ${config.pullRequestNumber} on project ${config.projectKey}.`,
+    );
+  }
+
+  await sleepFn(config.pollIntervalMs);
+  return waitForPullRequestAnalysisOnce(config, fetchImpl, sleepFn, nowFn);
+}
+
 export async function waitForPullRequestAnalysis(
   config: SonarConfig,
   fetchImpl: FetchLike,
@@ -373,81 +450,14 @@ export async function waitForPullRequestAnalysis(
     options.sleep ??
     ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const nowFn = options.now ?? (() => Date.now());
-
-  while (nowFn() < config.deadlineMs) {
-    const pullRequests = await listProjectPullRequests(config, fetchImpl);
-    const entry = findPullRequestForKey(
-      pullRequests,
-      config.pullRequestNumber,
-    );
-
-    const ceTasks = await fetchCeActivity(config, fetchImpl);
-    const failed = latestFailedCeForPullRequest(
-      ceTasks,
-      config.pullRequestNumber,
-    );
-    if (failed) {
-      const detail = failed.errorMessage?.trim() || "no error message";
-      throw new Error(
-        `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
-      );
-    }
-
-    if (entry && analysisMatchesHead(entry, config.headSha)) {
-      if (
-        findSuccessfulReportCeTaskForPullRequest(ceTasks, config.pullRequestNumber)
-      ) {
-        console.log(
-          `SonarCloud PR #${config.pullRequestNumber} has a successful REPORT compute-engine task for commit ${config.headSha}.`,
-        );
-        return entry;
-      }
-
-      const taskId =
-        config.ceTaskId ??
-        findCeTaskIdForPullRequest(ceTasks, config.pullRequestNumber);
-      if (taskId) {
-        const detail = await fetchCeTask(config, taskId, fetchImpl);
-        const status = detail.task?.status;
-        if (normalizeCeStatus(status) === "SUCCESS") {
-          console.log(
-            `SonarCloud compute-engine task ${taskId} succeeded for PR #${config.pullRequestNumber} at commit ${config.headSha}.`,
-          );
-          return entry;
-        }
-        if (isTerminalCeStatus(status)) {
-          assertCeTaskSucceeded(
-            config.pullRequestNumber,
-            status,
-            detail.task?.errorMessage,
-          );
-        }
-        console.log(
-          `SonarCloud compute-engine task ${taskId} status is ${status ?? "unknown"}; waiting for SUCCESS.`,
-        );
-      } else if (hasInProgressCeForPullRequest(ceTasks, config.pullRequestNumber)) {
-        console.log(
-          `SonarCloud PR #${config.pullRequestNumber} head commit is registered but compute engine is still running.`,
-        );
-      } else {
-        console.log(
-          `SonarCloud PR #${config.pullRequestNumber} head commit ${config.headSha} is registered; waiting for compute-engine SUCCESS before reading issues.`,
-        );
-      }
-    }
-
-    if (entry) {
-      const seenSha = entry.commit?.sha ?? "(none)";
-      console.log(
-        `Waiting for SonarCloud to finish analysing head ${config.headSha}; latest PR analysis commit is ${seenSha}.`,
-      );
-    } else {
-      console.log(
-        `Waiting for SonarCloud to register pull request ${config.pullRequestNumber} on project ${config.projectKey}.`,
-      );
-    }
-
-    await sleepFn(config.pollIntervalMs);
+  const entry = await waitForPullRequestAnalysisOnce(
+    config,
+    fetchImpl,
+    sleepFn,
+    nowFn,
+  );
+  if (entry !== null) {
+    return entry;
   }
 
   const waitedMinutes = Math.max(

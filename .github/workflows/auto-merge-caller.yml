@@ -15,7 +15,7 @@ concurrency:
 jobs:
   auto-merge:
     if: github.event.pull_request.draft == false
-    uses: ./.github/workflows/auto-merge.yml
+    uses: osloer-industries/.github/.github/workflows/auto-merge.yml@${{ github.sha }}
     with:
       release-app-id: ${{ vars.OSLOER_RELEASE_APP_ID }}
       merge-method: merge

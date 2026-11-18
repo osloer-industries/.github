@@ -39,6 +39,33 @@ function lineNestsExternalReusable(line: string): boolean {
   return value.includes("/.github/workflows/") && value.includes("@");
 }
 
+function isWorkflowJobIdChar(character: string, atStart: boolean): boolean {
+  if (character === "_" || character === "-") {
+    return !atStart;
+  }
+  const codePoint = character.codePointAt(0) ?? -1;
+  const isDigit = codePoint >= 48 && codePoint <= 57;
+  const isUpper = codePoint >= 65 && codePoint <= 90;
+  const isLower = codePoint >= 97 && codePoint <= 122;
+  if (atStart) {
+    return character === "_" || isLower || isUpper;
+  }
+  return isDigit || isLower || isUpper;
+}
+
+function isWorkflowJobId(jobId: string): boolean {
+  if (jobId.length === 0) {
+    return false;
+  }
+  for (let index = 0; index < jobId.length; index++) {
+    const character = jobId[index] ?? "";
+    if (!isWorkflowJobIdChar(character, index === 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function parseTopLevelJobId(line: string): string | undefined {
   if (!line.startsWith("  ") || line.startsWith("    ")) {
     return undefined;
@@ -48,28 +75,10 @@ function parseTopLevelJobId(line: string): string | undefined {
     return undefined;
   }
   const jobId = trimmed.slice(2, -1).trim();
-  if (jobId.length === 0 || jobId.includes(" ")) {
+  if (jobId.includes(" ")) {
     return undefined;
   }
-  let valid = true;
-  for (let index = 0; index < jobId.length; index++) {
-    const code = jobId.charCodeAt(index);
-    const isUnderscore = jobId[index] === "_";
-    const isHyphen = jobId[index] === "-";
-    const isDigit = code >= 48 && code <= 57;
-    const isUpper = code >= 65 && code <= 90;
-    const isLower = code >= 97 && code <= 122;
-    if (index === 0) {
-      if (!isUnderscore && !isLower && !isUpper) {
-        valid = false;
-        break;
-      }
-    } else if (!isUnderscore && !isHyphen && !isDigit && !isLower && !isUpper) {
-      valid = false;
-      break;
-    }
-  }
-  return valid ? jobId : undefined;
+  return isWorkflowJobId(jobId) ? jobId : undefined;
 }
 
 function load(path: string): string {
