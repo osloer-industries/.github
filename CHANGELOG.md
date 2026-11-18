@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/osloer-industries/.github/compare/v0.1.6...v0.1.7) (2026-11-18)
+
+
+### Bug Fixes
+
+* **dependency-review:** one gate check name on caller PRs ([#53](https://github.com/osloer-industries/.github/issues/53)) ([fcf9249](https://github.com/osloer-industries/.github/commit/fcf92492f6201525e419d6080180c215372cd0ea))
+
 ## [0.1.6](https://github.com/osloer-industries/.github/compare/v0.1.5...v0.1.6) (2026-11-18)
 
 
