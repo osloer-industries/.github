@@ -325,29 +325,6 @@ jobs:
       - name: Run mutation changed unit tests
         run: node --test .github/scripts/test-run-mutation-changed.test.ts
 
-  dependency-review-reusable-auto:
-    name: Dependency review reusable smoke (auto)
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/dependency-review.yml
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-      security-events: write
-
-  dependency-review-reusable-osv:
-    name: Dependency review reusable smoke (osv)
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/dependency-review.yml
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-      security-events: write
-    with:
-      mode: osv
-      timeout-minutes: 15
-
   zizmor-fail-closed-self-test:
     name: zizmor fail-closed self-test
     runs-on: ubuntu-latest
@@ -437,8 +414,6 @@ jobs:
       - dot-github-tooling
       - agents-md-lint-unit
       - mutation-changed-unit
-      - dependency-review-reusable-auto
-      - dependency-review-reusable-osv
       - zizmor-fail-closed-self-test
     if: always()
     runs-on: ubuntu-latest

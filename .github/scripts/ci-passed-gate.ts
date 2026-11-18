@@ -11,12 +11,6 @@ export const ALLOWED_NEEDS_RESULTS = new Set(["success"]);
 /** Default caller `needs` job id for SonarCloud zero-open-issues (override via SONAR_ZERO_ISSUES_JOB). */
 export const DEFAULT_SONAR_ZERO_ISSUES_JOB_ID = "sonar-zero-open-issues";
 
-/** PR-only dependency-review reusable smoke jobs in this repository's CI workflow. */
-export const DEPENDENCY_REVIEW_SMOKE_JOB_IDS = new Set([
-  "dependency-review-reusable-auto",
-  "dependency-review-reusable-osv",
-]);
-
 export interface NeedsJobEntry {
   result: string;
   outputs?: Record<string, string>;
@@ -105,13 +99,6 @@ function skippedAllowedForSonarJob(
   return eventName !== undefined && eventName.length > 0;
 }
 
-function skippedAllowedOffPullRequest(jobId: string, eventName: string | undefined): boolean {
-  if (eventName === "pull_request" || eventName === undefined || eventName.length === 0) {
-    return false;
-  }
-  return DEPENDENCY_REVIEW_SMOKE_JOB_IDS.has(jobId);
-}
-
 export function findNeedsFailures(
   needs: NeedsMap,
   eventName?: string,
@@ -130,9 +117,6 @@ export function findNeedsFailures(
       continue;
     }
     if (result === "skipped" && skippedAllowedForSonarJob(jobId, eventName, sonarZeroIssuesJobId)) {
-      continue;
-    }
-    if (result === "skipped" && skippedAllowedOffPullRequest(jobId, eventName)) {
       continue;
     }
     if (!ALLOWED_NEEDS_RESULTS.has(result)) {
