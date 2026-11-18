@@ -325,6 +325,12 @@ jobs:
       - name: Run mutation changed unit tests
         run: node --test .github/scripts/test-run-mutation-changed.test.ts
 
+  sonar-zero-open-issues:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/sonarcloud-zero-issues.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   zizmor-fail-closed-self-test:
     name: zizmor fail-closed self-test
     runs-on: ubuntu-latest
@@ -414,6 +420,7 @@ jobs:
       - dot-github-tooling
       - agents-md-lint-unit
       - mutation-changed-unit
+      - sonar-zero-open-issues
       - zizmor-fail-closed-self-test
     if: always()
     runs-on: ubuntu-latest

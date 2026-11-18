@@ -5,11 +5,12 @@ import { test } from "node:test";
 const ASSERT_SCRIPT = ".github/scripts/assert-nested-reusable-permissions.ts";
 
 test("nested reusable permission contract passes on repository workflows", () => {
-  execFileSync("node", ["--experimental-strip-types", ASSERT_SCRIPT], {
+  const output = execFileSync("node", ["--experimental-strip-types", ASSERT_SCRIPT], {
     cwd: process.cwd(),
     stdio: "pipe",
     encoding: "utf8",
   });
+  assert.match(output, /Nested reusable workflow permission contracts OK/);
 });
 
 test("exported dependency review caller permission list is complete", async () => {

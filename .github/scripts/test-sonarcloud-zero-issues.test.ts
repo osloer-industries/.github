@@ -7,7 +7,10 @@ import {
   fetchOpenIssues,
   fetchOpenIssuesWhenSettled,
   hasInProgressCeForPullRequest,
+  issuesSearchPath,
+  parseAnalysisDateMs,
   parseConfigFromEnv,
+  resolveEarliestIssueSettleMs,
   resolveProjectKey,
   runSonarZeroIssuesGate,
   waitForPullRequestAnalysis,
@@ -36,6 +39,7 @@ function baseConfig(overrides: Partial<SonarConfig> = {}): SonarConfig {
     organization: "osloer-industries",
     issuesSettlePolls: 2,
     issuesMinPollsBeforeSettle: 3,
+    postAnalysisGraceMs: 0,
     ...overrides,
   };
 }
@@ -363,6 +367,65 @@ test("runSonarZeroIssuesGate fails when issues remain", async () => {
     now: () => config.startedAtMs + tick * 2,
   });
   assert.equal(code, 1);
+});
+
+test("issuesSearchPath scopes SonarCloud PR issues to the organization", () => {
+  const path = issuesSearchPath(
+    {
+      organization: "osloer-industries",
+      projectKey: "osloer-industries_demo",
+      pullRequestNumber: 51,
+    },
+    1,
+    500,
+  );
+  assert.match(path, /organization=osloer-industries/);
+  assert.match(path, /resolved=false/);
+  assert.match(path, /issueStatuses=OPEN,CONFIRMED/);
+  assert.match(path, /pullRequest=51/);
+});
+
+test("resolveEarliestIssueSettleMs waits after SonarCloud analysisDate", () => {
+  const startedAtMs = Date.parse("2026-11-18T07:00:00.000Z");
+  const earliest = resolveEarliestIssueSettleMs(
+    "2026-11-18T07:05:00+0000",
+    45_000,
+    startedAtMs,
+  );
+  assert.equal(earliest, Date.parse("2026-11-18T07:05:00.000Z") + 45_000);
+  assert.equal(parseAnalysisDateMs("not-a-date"), null);
+});
+
+test("fetchOpenIssuesWhenSettled waits for post-analysis grace", async () => {
+  const startedAtMs = 1_000_000;
+  const config = baseConfig({
+    startedAtMs,
+    deadlineMs: startedAtMs + 60_000,
+    postAnalysisGraceMs: 20_000,
+    pollIntervalMs: 1,
+  });
+  let issueCalls = 0;
+  const fetchImpl: FetchLike = async (input) => {
+    const url = String(input);
+    if (!url.includes("/api/issues/search")) {
+      throw new Error(`unexpected ${url}`);
+    }
+    issueCalls += 1;
+    return jsonResponse({ total: 0, issues: [] });
+  };
+
+  let tick = 0;
+  await fetchOpenIssuesWhenSettled(config, fetchImpl, {
+    earliestSettleMs: startedAtMs + 12,
+    settlePolls: 1,
+    minPollsBeforeSettle: 1,
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => startedAtMs + tick,
+  });
+  assert.equal(issueCalls, 1);
+  assert.equal(tick >= 12, true);
 });
 
 test("analysisMatchesHead is case-insensitive", () => {

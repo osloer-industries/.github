@@ -22,6 +22,7 @@ export interface SonarConfig {
   organization: string;
   issuesMinPollsBeforeSettle: number;
   issuesSettlePolls: number;
+  postAnalysisGraceMs: number;
 }
 
 export interface PullRequestAnalysis {
@@ -131,6 +132,7 @@ export function parseConfigFromEnv(
 
   const issuesSettlePolls = parseIssueSettlePolls(env);
   const issuesMinPollsBeforeSettle = parseIssueMinPollsBeforeSettle(env);
+  const postAnalysisGraceMs = parsePostAnalysisGraceSeconds(env);
   if (issuesMinPollsBeforeSettle < issuesSettlePolls) {
     console.error(
       "::error::SONAR_ISSUES_MIN_POLLS must be at least SONAR_ISSUES_SETTLE_POLLS so the gate cannot pass on the first stable empty snapshot.",
@@ -154,6 +156,7 @@ export function parseConfigFromEnv(
     organization,
     issuesSettlePolls,
     issuesMinPollsBeforeSettle,
+    postAnalysisGraceMs,
   };
 }
 
@@ -362,10 +365,50 @@ export function sonarIssuesPageUrl(
   );
 }
 
+export function issuesSearchPath(
+  config: Pick<
+    SonarConfig,
+    "host" | "projectKey" | "pullRequestNumber" | "organization"
+  >,
+  page: number,
+  pageSize: number,
+): string {
+  return (
+    `/api/issues/search?organization=${encodeURIComponent(config.organization)}` +
+    `&componentKeys=${encodeURIComponent(config.projectKey)}` +
+    `&pullRequest=${encodeURIComponent(String(config.pullRequestNumber))}` +
+    "&issueStatuses=OPEN,CONFIRMED" +
+    "&resolved=false" +
+    `&ps=${pageSize}&p=${page}`
+  );
+}
+
+export function parseAnalysisDateMs(analysisDate?: string): number | null {
+  const trimmed = analysisDate?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const millis = Date.parse(trimmed);
+  if (!Number.isFinite(millis)) {
+    return null;
+  }
+  return millis;
+}
+
+export function resolveEarliestIssueSettleMs(
+  analysisDate: string | undefined,
+  graceMs: number,
+  startedAtMs: number,
+): number {
+  const parsed = parseAnalysisDateMs(analysisDate);
+  const baseMs = parsed ?? startedAtMs;
+  return baseMs + graceMs;
+}
+
 export async function fetchOpenIssues(
   config: Pick<
     SonarConfig,
-    "host" | "token" | "projectKey" | "pullRequestNumber"
+    "host" | "token" | "projectKey" | "pullRequestNumber" | "organization"
   >,
   fetchImpl: FetchLike,
 ): Promise<SonarIssue[]> {
@@ -375,11 +418,7 @@ export async function fetchOpenIssues(
   let total = Number.POSITIVE_INFINITY;
 
   while (collected.length < total) {
-    const path =
-      `/api/issues/search?componentKeys=${encodeURIComponent(config.projectKey)}` +
-      `&pullRequest=${encodeURIComponent(String(config.pullRequestNumber))}` +
-      "&issueStatuses=OPEN,CONFIRMED" +
-      `&ps=${pageSize}&p=${page}`;
+    const path = issuesSearchPath(config, page, pageSize);
     const data = await sonarGetJson<IssuesSearchPage & { paging?: { total?: number } }>(
       config.host,
       config.token,
@@ -400,6 +439,7 @@ export async function fetchOpenIssues(
 
 const DEFAULT_ISSUE_SETTLE_POLLS = 3;
 const DEFAULT_ISSUE_MIN_POLLS = 3;
+const DEFAULT_POST_ANALYSIS_GRACE_SECONDS = 45;
 
 function parseIssueSettlePolls(env: NodeJS.ProcessEnv): number {
   const raw = Number(env.SONAR_ISSUES_SETTLE_POLLS ?? String(DEFAULT_ISSUE_SETTLE_POLLS));
@@ -410,6 +450,19 @@ function parseIssueSettlePolls(env: NodeJS.ProcessEnv): number {
     process.exit(1);
   }
   return raw;
+}
+
+function parsePostAnalysisGraceSeconds(env: NodeJS.ProcessEnv): number {
+  const raw = Number(
+    env.SONAR_POST_ANALYSIS_GRACE_SECONDS ?? String(DEFAULT_POST_ANALYSIS_GRACE_SECONDS),
+  );
+  if (!Number.isFinite(raw) || raw < 0) {
+    console.error(
+      `::error::SONAR_POST_ANALYSIS_GRACE_SECONDS must be a non-negative number (got ${JSON.stringify(env.SONAR_POST_ANALYSIS_GRACE_SECONDS)}).`,
+    );
+    process.exit(1);
+  }
+  return Math.round(raw * 1000);
 }
 
 function parseIssueMinPollsBeforeSettle(env: NodeJS.ProcessEnv): number {
@@ -432,7 +485,11 @@ interface IssueSettleState {
 export async function fetchOpenIssuesWhenSettled(
   config: SonarConfig,
   fetchImpl: FetchLike,
-  options: WaitOptions & { settlePolls?: number; minPollsBeforeSettle?: number } = {},
+  options: WaitOptions & {
+    settlePolls?: number;
+    minPollsBeforeSettle?: number;
+    earliestSettleMs?: number;
+  } = {},
 ): Promise<SonarIssue[]> {
   const sleepFn =
     options.sleep ??
@@ -441,6 +498,16 @@ export async function fetchOpenIssuesWhenSettled(
   const settlePolls = options.settlePolls ?? config.issuesSettlePolls;
   const minPollsBeforeSettle =
     options.minPollsBeforeSettle ?? config.issuesMinPollsBeforeSettle;
+  const earliestSettleMs = options.earliestSettleMs ?? config.startedAtMs;
+
+  while (nowFn() < earliestSettleMs) {
+    if (nowFn() >= config.deadlineMs) {
+      throw new Error(
+        `Timed out waiting for SonarCloud post-analysis grace on PR #${config.pullRequestNumber}.`,
+      );
+    }
+    await sleepFn(config.pollIntervalMs);
+  }
 
   const pollOnce = async (
     state: IssueSettleState,
@@ -520,8 +587,16 @@ export async function runSonarZeroIssuesGate(
   fetchImpl: FetchLike = fetch,
   waitOptions: RunSonarZeroIssuesGateOptions = {},
 ): Promise<number> {
-  await waitForPullRequestAnalysis(config, fetchImpl, waitOptions);
-  const issues = await fetchOpenIssuesWhenSettled(config, fetchImpl, waitOptions);
+  const analysis = await waitForPullRequestAnalysis(config, fetchImpl, waitOptions);
+  const earliestSettleMs = resolveEarliestIssueSettleMs(
+    analysis.analysisDate,
+    config.postAnalysisGraceMs,
+    config.startedAtMs,
+  );
+  const issues = await fetchOpenIssuesWhenSettled(config, fetchImpl, {
+    ...waitOptions,
+    earliestSettleMs,
+  });
   if (issues.length === 0) {
     console.log(
       `SonarCloud zero open issues: no OPEN or CONFIRMED issues on PR #${config.pullRequestNumber}.`,

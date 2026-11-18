@@ -24,8 +24,53 @@ export const DEPENDENCY_REVIEW_CALLER_JOB_PERMISSIONS = [
   "security-events: write",
 ] as const;
 
-const EXTERNAL_REUSABLE_USES =
-  /^\s*uses:\s+(?!actions\/|osloer-industries\/)(\S+\/\.github\/workflows\/\S+@\S+)/;
+function lineNestsExternalReusable(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (!trimmed.startsWith("uses:")) {
+    return false;
+  }
+  const value = trimmed.slice("uses:".length).trim();
+  if (value.startsWith("actions/")) {
+    return false;
+  }
+  if (value.startsWith("osloer-industries/")) {
+    return false;
+  }
+  return value.includes("/.github/workflows/") && value.includes("@");
+}
+
+function parseTopLevelJobId(line: string): string | undefined {
+  if (!line.startsWith("  ") || line.startsWith("    ")) {
+    return undefined;
+  }
+  const trimmed = line.trimEnd();
+  if (!trimmed.endsWith(":")) {
+    return undefined;
+  }
+  const jobId = trimmed.slice(2, -1).trim();
+  if (jobId.length === 0 || jobId.includes(" ")) {
+    return undefined;
+  }
+  let valid = true;
+  for (let index = 0; index < jobId.length; index++) {
+    const code = jobId.charCodeAt(index);
+    const isUnderscore = jobId[index] === "_";
+    const isHyphen = jobId[index] === "-";
+    const isDigit = code >= 48 && code <= 57;
+    const isUpper = code >= 65 && code <= 90;
+    const isLower = code >= 97 && code <= 122;
+    if (index === 0) {
+      if (!isUnderscore && !isLower && !isUpper) {
+        valid = false;
+        break;
+      }
+    } else if (!isUnderscore && !isHyphen && !isDigit && !isLower && !isUpper) {
+      valid = false;
+      break;
+    }
+  }
+  return valid ? jobId : undefined;
+}
 
 function load(path: string): string {
   try {
@@ -106,7 +151,7 @@ function jobNestsExternalReusable(yaml: string, jobId: string): boolean {
     if (inJob && line.length > 0 && !line.startsWith("    ")) {
       break;
     }
-    if (inJob && EXTERNAL_REUSABLE_USES.test(line)) {
+    if (inJob && lineNestsExternalReusable(line)) {
       return true;
     }
   }
@@ -160,12 +205,12 @@ for (const file of workflowFiles) {
   const lines = yaml.split("\n");
   let currentJob: string | undefined;
   for (const line of lines) {
-    const jobMatch = /^  ([\w][\w-]*):\s*$/.exec(line);
-    if (jobMatch !== null && line !== "  ci-passed:") {
-      currentJob = jobMatch[1];
+    const jobId = parseTopLevelJobId(line);
+    if (jobId !== undefined && line !== "  ci-passed:") {
+      currentJob = jobId;
       continue;
     }
-    if (currentJob !== undefined && EXTERNAL_REUSABLE_USES.test(line)) {
+    if (currentJob !== undefined && lineNestsExternalReusable(line)) {
       const granted = jobPermissions(yaml, currentJob);
       if (granted === null) {
         fail(`${path} job ${currentJob}: nests external reusable but job not found`);
