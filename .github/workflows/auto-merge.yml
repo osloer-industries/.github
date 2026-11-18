@@ -31,11 +31,7 @@ jobs:
     timeout-minutes: 10
     if: >-
       github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == false &&
-      (
-        (inputs.allow-dependabot == true && github.event.pull_request.user.login == 'dependabot[bot]') ||
-        (inputs.allow-release-prs == true && github.event.pull_request.user.login == 'osloer-reviewer[bot]')
-      )
+      github.event.pull_request.draft == false
     permissions:
       contents: read
       pull-requests: read

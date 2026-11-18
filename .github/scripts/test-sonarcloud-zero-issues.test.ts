@@ -6,11 +6,11 @@ import {
   analysisMatchesHead,
   fetchOpenIssues,
   fetchOpenIssuesWhenSettled,
+  findCeTaskIdForPullRequest,
   hasInProgressCeForPullRequest,
   issuesSearchPath,
-  parseAnalysisDateMs,
+  normalizeCeStatus,
   parseConfigFromEnv,
-  resolveEarliestIssueSettleMs,
   resolveProjectKey,
   runSonarZeroIssuesGate,
   waitForPullRequestAnalysis,
@@ -39,7 +39,6 @@ function baseConfig(overrides: Partial<SonarConfig> = {}): SonarConfig {
     organization: "osloer-industries",
     issuesSettlePolls: 2,
     issuesMinPollsBeforeSettle: 3,
-    postAnalysisGraceMs: 0,
     ...overrides,
   };
 }
@@ -166,7 +165,16 @@ test("waitForPullRequestAnalysis succeeds when commit sha matches", async () => 
       });
     }
     if (url.includes("/api/ce/activity")) {
-      return jsonResponse({ tasks: [] });
+      return jsonResponse({
+        tasks: [
+          {
+            id: "ce-abc",
+            pullRequest: "17",
+            status: "SUCCESS",
+            type: "REPORT",
+          },
+        ],
+      });
     }
     throw new Error(`unexpected fetch ${url}`);
   };
@@ -177,6 +185,40 @@ test("waitForPullRequestAnalysis succeeds when commit sha matches", async () => 
   });
   assert.equal(result.key, "17");
   assert.equal(calls >= 1, true);
+});
+
+test("waitForPullRequestAnalysis polls ce/task when ce-task-id is configured", async () => {
+  const config = baseConfig({ ceTaskId: "ce-explicit" });
+  let ceTaskCalls = 0;
+  const fetchImpl: FetchLike = async (input) => {
+    const url = String(input);
+    if (url.includes("/api/project_pull_requests/list")) {
+      return jsonResponse({
+        pullRequests: [{ key: "17", commit: { sha: config.headSha } }],
+      });
+    }
+    if (url.includes("/api/ce/activity")) {
+      return jsonResponse({ tasks: [] });
+    }
+    if (url.includes("/api/ce/task?id=ce-explicit")) {
+      ceTaskCalls += 1;
+      if (ceTaskCalls < 2) {
+        return jsonResponse({ task: { id: "ce-explicit", status: "IN_PROGRESS" } });
+      }
+      return jsonResponse({ task: { id: "ce-explicit", status: "SUCCESS" } });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  let tick = 0;
+  const result = await waitForPullRequestAnalysis(config, fetchImpl, {
+    sleep: async () => {
+      tick += 1;
+    },
+    now: () => config.startedAtMs + tick * 2,
+  });
+  assert.equal(result.key, "17");
+  assert.equal(ceTaskCalls >= 2, true);
 });
 
 test("waitForPullRequestAnalysis times out when commit never matches", async () => {
@@ -308,7 +350,9 @@ test("runSonarZeroIssuesGate passes with zero open issues", async () => {
       });
     }
     if (url.includes("/api/ce/activity")) {
-      return jsonResponse({ tasks: [] });
+      return jsonResponse({
+        tasks: [{ id: "ce-1", pullRequest: "17", status: "SUCCESS", type: "REPORT" }],
+      });
     }
     if (url.includes("/api/issues/search")) {
       return jsonResponse({ total: 0, issues: [] });
@@ -338,7 +382,9 @@ test("runSonarZeroIssuesGate fails when issues remain", async () => {
       });
     }
     if (url.includes("/api/ce/activity")) {
-      return jsonResponse({ tasks: [] });
+      return jsonResponse({
+        tasks: [{ id: "ce-2", pullRequest: "17", status: "SUCCESS", type: "REPORT" }],
+      });
     }
     if (url.includes("/api/issues/search")) {
       return jsonResponse({
@@ -385,47 +431,16 @@ test("issuesSearchPath scopes SonarCloud PR issues to the organization", () => {
   assert.match(path, /pullRequest=51/);
 });
 
-test("resolveEarliestIssueSettleMs waits after SonarCloud analysisDate", () => {
-  const startedAtMs = Date.parse("2026-11-18T07:00:00.000Z");
-  const earliest = resolveEarliestIssueSettleMs(
-    "2026-11-18T07:05:00+0000",
-    45_000,
-    startedAtMs,
+test("findCeTaskIdForPullRequest picks pull-request scoped task ids", () => {
+  const id = findCeTaskIdForPullRequest(
+    [
+      { id: "other", pullRequest: "18", status: "SUCCESS" },
+      { id: "ce-match", pullRequest: "17", status: "IN_PROGRESS" },
+    ],
+    17,
   );
-  assert.equal(earliest, Date.parse("2026-11-18T07:05:00.000Z") + 45_000);
-  assert.equal(parseAnalysisDateMs("not-a-date"), null);
-});
-
-test("fetchOpenIssuesWhenSettled waits for post-analysis grace", async () => {
-  const startedAtMs = 1_000_000;
-  const config = baseConfig({
-    startedAtMs,
-    deadlineMs: startedAtMs + 60_000,
-    postAnalysisGraceMs: 20_000,
-    pollIntervalMs: 1,
-  });
-  let issueCalls = 0;
-  const fetchImpl: FetchLike = async (input) => {
-    const url = String(input);
-    if (!url.includes("/api/issues/search")) {
-      throw new Error(`unexpected ${url}`);
-    }
-    issueCalls += 1;
-    return jsonResponse({ total: 0, issues: [] });
-  };
-
-  let tick = 0;
-  await fetchOpenIssuesWhenSettled(config, fetchImpl, {
-    earliestSettleMs: startedAtMs + 12,
-    settlePolls: 1,
-    minPollsBeforeSettle: 1,
-    sleep: async () => {
-      tick += 1;
-    },
-    now: () => startedAtMs + tick,
-  });
-  assert.equal(issueCalls, 1);
-  assert.equal(tick >= 12, true);
+  assert.equal(id, "ce-match");
+  assert.equal(normalizeCeStatus("success"), "SUCCESS");
 });
 
 test("analysisMatchesHead is case-insensitive", () => {

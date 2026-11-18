@@ -99,6 +99,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
 | `sonarcloud-zero-issues.yml` | `issues-settle-polls` | `3` | Consecutive matching open-issue API pages before enforcing zero issues |
 | `sonarcloud-zero-issues.yml` | `issues-min-polls` | `3` | Minimum issue API polls before a stable empty snapshot can pass |
+| `sonarcloud-zero-issues.yml` | `ce-task-id` | *(empty)* | Sonar `ceTaskId` from `report-task.txt` (`sonarqube-cloud-node.yml` job output `ce-task-id`); polls `api/ce/task` until SUCCESS |
 | `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
 | `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
@@ -393,11 +394,13 @@ jobs:
   zero-open-issues:
     needs: analyze
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
+    with:
+      ce-task-id: ${{ needs.analyze.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
+Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate waits until the head commit appears on `api/project_pull_requests/list` **and** a pull-request REPORT compute-engine task reaches **SUCCESS** (via `api/ce/activity` / `api/ce/task`).
 
 Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). No extra inputs such as `reusables-ref` are required.
 

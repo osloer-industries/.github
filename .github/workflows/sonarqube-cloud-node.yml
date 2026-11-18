@@ -35,6 +35,8 @@ on:
 jobs:
   analyze:
     name: Analyze
+    outputs:
+      ce-task-id: ${{ steps.sonar-report-task.outputs.ce-task-id }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
@@ -93,5 +95,34 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - if: env.SONAR_TOKEN != ''
+        id: sonar-report-task
+        run: |
+          set -euo pipefail
+          task_file=""
+          for candidate in report-task.txt .scannerwork/report-task.txt; do
+            if [ -f "$candidate" ]; then
+              task_file="$candidate"
+              break
+            fi
+          done
+          if [ -z "$task_file" ]; then
+            echo "::error::Sonar report-task.txt not found after scan (expected report-task.txt or .scannerwork/report-task.txt)"
+            exit 1
+          fi
+          ce_task_id=""
+          while IFS= read -r line; do
+            case "$line" in
+              ceTaskId=*)
+                ce_task_id="${line#ceTaskId=}"
+                ;;
+            esac
+          done < "$task_file"
+          if [ -z "$ce_task_id" ]; then
+            echo "::error::ceTaskId missing from ${task_file}"
+            exit 1
+          fi
+          echo "ce-task-id=$ce_task_id" >> "$GITHUB_OUTPUT"
+          echo "Sonar compute-engine task id: ${ce_task_id}"
       - if: env.SONAR_TOKEN == ''
         run: echo "SonarQube Cloud analysis skipped because SONAR_TOKEN is not configured."
