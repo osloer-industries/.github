@@ -5,6 +5,9 @@ name: Reusable — dependency review
 # GitHub validates nested reusables at workflow startup; `mode: auto` on a public repo
 # still requires security-events: write because the nested OSV job is declared.
 #
+# Check names: one required gate **Review dependency changes**; the nested Google OSV job is
+# **OSV PR scan (private repos only)** so public-repo PRs never show skipped jobs with the gate name.
+#
 # Minimal caller:
 #   jobs:
 #     review:
@@ -30,47 +33,14 @@ on:
         type: string
         default: high
       timeout-minutes:
-        description: Job timeout (github-dependency-review job; OSV nested reusable has no timeout input)
+        description: Job timeout (review-dependency-changes job; OSV nested reusable has no timeout input)
         type: number
         default: 10
 
 jobs:
-  mode-invalid:
-    name: Review dependency changes
-    if: ${{ inputs.mode != 'auto' && inputs.mode != 'github' && inputs.mode != 'osv' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Reject unknown mode
-        env:
-          MODE_INPUT: ${{ inputs.mode }}
-        run: |
-          set -euo pipefail
-          echo "::error::Invalid dependency-review mode '$MODE_INPUT' (expected auto, github, or osv)"
-          exit 1
-
-  github-dependency-review:
-    name: Review dependency changes
-    if: >-
-      ${{ inputs.mode == 'github' || (inputs.mode == 'auto' && github.event.repository.private == false) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: GitHub Dependency Review
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: ${{ inputs.fail-on-severity }}
-
-  # fail-on-vuln: false so Google’s workflow always uploads SARIF/JSON artifacts; enforcement is in review-dependency-changes-osv.
+  # fail-on-vuln: false so Google’s workflow always uploads SARIF/JSON artifacts; enforcement is in review-dependency-changes.
   osv-dependency-review:
-    name: OSV PR scan
+    name: OSV PR scan (private repos only)
     if: >-
       ${{ inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true) }}
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
@@ -82,40 +52,91 @@ jobs:
       upload-sarif: false
       fail-on-vuln: false
 
-  review-dependency-changes-osv:
+  review-dependency-changes:
     name: Review dependency changes
     needs: osv-dependency-review
     if: >-
-      always() &&
-      needs.osv-dependency-review.result != 'skipped' &&
-      (inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true))
+      always() && (
+        (inputs.mode != 'auto' && inputs.mode != 'github' && inputs.mode != 'osv') ||
+        (inputs.mode == 'github' || (inputs.mode == 'auto' && github.event.repository.private == false)) ||
+        (inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true))
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
       actions: read
       pull-requests: read
     steps:
+      - name: Reject unknown mode
+        if: ${{ inputs.mode != 'auto' && inputs.mode != 'github' && inputs.mode != 'osv' }}
+        env:
+          MODE_INPUT: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          echo "::error::Invalid dependency-review mode '$MODE_INPUT' (expected auto, github, or osv)"
+          exit 1
+
+      - name: Fail when OSV PR scan did not succeed
+        if: >-
+          (inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)) &&
+          needs.osv-dependency-review.result != 'success'
+        env:
+          OSV_RESULT: ${{ needs.osv-dependency-review.result }}
+        run: |
+          set -euo pipefail
+          echo "::error::OSV PR scan did not succeed (result: $OSV_RESULT)"
+          exit 1
+
+      - name: Checkout
+        if: >-
+          inputs.mode == 'github' || (inputs.mode == 'auto' && github.event.repository.private == false)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: GitHub Dependency Review
+        if: >-
+          inputs.mode == 'github' || (inputs.mode == 'auto' && github.event.repository.private == false)
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+
       - name: Download OSV PR scan SARIF (nested reusable)
+        if: >-
+          inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: OSV Scanner SARIF file
           path: osv-sarif
+
       - name: Upload OSV SARIF artifact (private repos, no Code Scanning)
+        if: >-
+          inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: osv-sarif-${{ github.run_id }}
           path: osv-sarif/
           if-no-files-found: error
+
       - name: Download OSV JSON scan results
+        if: >-
+          inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: old-json-results
           path: osv-json
+
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        if: >-
+          inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)
         with:
           name: new-json-results
           path: osv-json
+
       - name: Enforce new vulnerabilities (OSV reporter)
+        if: >-
+          inputs.mode == 'osv' || (inputs.mode == 'auto' && github.event.repository.private == true)
         uses: google/osv-scanner-action/osv-reporter-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
         with:
           scan-args: |-

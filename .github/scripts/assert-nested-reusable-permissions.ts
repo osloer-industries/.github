@@ -148,6 +148,17 @@ function requiredNestedPermissionsMet(granted: Set<string>, required: readonly s
   return missing;
 }
 
+/** Job `name:` values in a workflow YAML (one line per job: `    name: …`). */
+function jobDisplayNames(yaml: string): string[] {
+  const names: string[] = [];
+  for (const line of yaml.split("\n")) {
+    if (line.startsWith("    name: ")) {
+      names.push(line.slice("    name: ".length).trim());
+    }
+  }
+  return names;
+}
+
 function jobNestsExternalReusable(yaml: string, jobId: string): boolean {
   const lines = yaml.split("\n");
   const jobMarker = `  ${jobId}:`;
@@ -181,6 +192,19 @@ if (!dependencyReviewYaml.includes("osv-scanner-reusable-pr.yml@32d3cd482bdadfb3
   fail(
     `${dependencyReviewPath}: unexpected Google OSV reusable pin — update OSV_NESTED_REUSABLE_PR_PERMISSIONS if the pin changed`,
   );
+}
+
+const gateName = "Review dependency changes";
+const gateNameCount = jobDisplayNames(dependencyReviewYaml).filter((name) => name === gateName).length;
+if (gateNameCount !== 1) {
+  fail(
+    `${dependencyReviewPath}: expected exactly one job named "${gateName}" (found ${gateNameCount})`,
+  );
+}
+
+const osvScanName = "OSV PR scan (private repos only)";
+if (!jobDisplayNames(dependencyReviewYaml).includes(osvScanName)) {
+  fail(`${dependencyReviewPath}: nested OSV job must be named "${osvScanName}"`);
 }
 
 const osvJobPerms = jobPermissions(dependencyReviewYaml, "osv-dependency-review");

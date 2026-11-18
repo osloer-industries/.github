@@ -35,10 +35,10 @@ Check names (stable for branch protection):
 
 | Mode | Required check |
 | --- | --- |
-| `github` / `auto` on public | **`Review dependency changes`** |
-| `osv` / `auto` on private | **`Review dependency changes`** (org gate job after nested OSV scan) |
+| `github` / `auto` on public | **`Review dependency changes`** (one gate job; nested **`OSV PR scan (private repos only)`** skipped) |
+| `osv` / `auto` on private | **`Review dependency changes`** gate after **`OSV PR scan (private repos only)`** |
 
-Private OSV path (no GHAS SARIF upload): Google’s nested **`osv-scanner-reusable-pr.yml`** runs with `upload-sarif: false` and `fail-on-vuln: false` so it always publishes scan outputs. The follow-up job re-uploads SARIF as workflow artifact **`osv-sarif-${{ github.run_id }}`** (same `actions/upload-artifact` pin as CodeQL artifact mode) and enforces new vulnerabilities with **`osv-reporter-action`**. Google also uploads **`OSV Scanner SARIF file`** (5-day retention) from the nested job. Download **`osv-sarif-*`** on the workflow run for triage, like CodeQL’s **`codeql-sarif-*`**.
+Private OSV path (no GHAS SARIF upload): Google’s nested **`osv-scanner-reusable-pr.yml`** runs with `upload-sarif: false` and `fail-on-vuln: false` so it always publishes scan outputs. The gate job re-uploads SARIF as workflow artifact **`osv-sarif-${{ github.run_id }}`** (same `actions/upload-artifact` pin as CodeQL artifact mode) and enforces new vulnerabilities with **`osv-reporter-action`**. Google also uploads **`OSV Scanner SARIF file`** (5-day retention) from the nested job. Download **`osv-sarif-*`** on the workflow run for triage, like CodeQL’s **`codeql-sarif-*`**.
 
 OSV’s default recursive scan picks up npm **`package-lock.json`** and Bun **`bun.lock`** lockfiles in the caller repo (see [OSV GitHub Action docs](https://google.github.io/osv-scanner/github-action/)).
 
