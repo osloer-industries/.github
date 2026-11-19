@@ -4,7 +4,7 @@
  * and Release Please release PRs). Ineligible PRs exit 0 with a log line (fail closed).
  */
 
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
@@ -72,13 +72,9 @@ function parseBool(value: string | undefined, name: string): boolean {
   process.exit(1);
 }
 
-export function parseEnv(env: NodeJS.ProcessEnv): AutoMergeEnv {
-  const token = (env.GITHUB_APP_TOKEN ?? "").trim();
-  if (token.length === 0) {
-    console.error("::error::GITHUB_APP_TOKEN is required.");
-    process.exit(1);
-  }
-
+function parseEnvCore(
+  env: NodeJS.ProcessEnv,
+): Omit<AutoMergeEnv, "token"> {
   const prNumber = Number(env.PULL_REQUEST_NUMBER ?? "");
   if (!Number.isInteger(prNumber) || prNumber <= 0) {
     console.error("::error::PULL_REQUEST_NUMBER must be a positive integer.");
@@ -110,8 +106,28 @@ export function parseEnv(env: NodeJS.ProcessEnv): AutoMergeEnv {
     dependabotUpdateType: (env.DEPENDABOT_UPDATE_TYPE ?? "").trim(),
     dependabotDependencyGroup: (env.DEPENDABOT_DEPENDENCY_GROUP ?? "").trim(),
     prBody: env.PR_BODY ?? "",
-    token,
   };
+}
+
+export function parseEnv(env: NodeJS.ProcessEnv): AutoMergeEnv {
+  const token = (env.GITHUB_APP_TOKEN ?? "").trim();
+  if (token.length === 0) {
+    console.error("::error::GITHUB_APP_TOKEN is required.");
+    process.exit(1);
+  }
+  return { ...parseEnvCore(env), token };
+}
+
+export function emitAutoMergeEligibility(env: NodeJS.ProcessEnv): void {
+  const decision = evaluateEligibility({ ...parseEnvCore(env), token: "unused" });
+  const outputPath = (env.GITHUB_OUTPUT ?? "").trim();
+  const eligible = decision.eligible ? "true" : "false";
+  if (outputPath.length > 0) {
+    appendFileSync(outputPath, `eligible=${eligible}\n`, "utf8");
+  }
+  if (!decision.eligible) {
+    console.log(`Skipping auto-merge: ${decision.reason}`);
+  }
 }
 
 export type EligibilityReason =
@@ -341,6 +357,10 @@ export function runAutoMerge(cfg: AutoMergeEnv): void {
 }
 
 function main(): void {
+  if (parseBool(process.env.AUTO_MERGE_ELIGIBILITY_ONLY ?? "false", "AUTO_MERGE_ELIGIBILITY_ONLY")) {
+    emitAutoMergeEligibility(process.env);
+    return;
+  }
   const cfg = parseEnv(process.env);
   runAutoMerge(cfg);
 }

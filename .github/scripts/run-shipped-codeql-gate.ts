@@ -1,19 +1,17 @@
 #!/usr/bin/env node
-/** Run the CodeQL SARIF gate exactly as shipped in the reusable workflow. */
+/** Run the CodeQL SARIF gate script (same entry point as the reusable workflow). */
 
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractInlineBody } from "./codeql-gate-inline.ts";
+
+const GATE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "codeql-sarif-security-gate.ts",
+);
 
 function main(): number {
-  const script = extractInlineBody();
-  const dir = mkdtempSync(join(tmpdir(), "codeql-gate-"));
-  const path = join(dir, "gate.mts");
-  writeFileSync(path, script, { encoding: "utf-8" });
-  const completed = spawnSync(process.execPath, [path], {
+  const completed = spawnSync(process.execPath, [GATE], {
     stdio: "inherit",
     env: process.env,
   });
