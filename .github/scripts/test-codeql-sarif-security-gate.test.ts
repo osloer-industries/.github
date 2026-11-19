@@ -1,4 +1,4 @@
-/** CI tests for codeql-sarif-security-gate.ts (via the shipped inline copy). */
+/** CI tests for codeql-sarif-security-gate.ts (via run-shipped-codeql-gate.ts). */
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync } from "node:fs";

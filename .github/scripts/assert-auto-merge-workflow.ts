@@ -5,7 +5,6 @@
 import { readFileSync } from "node:fs";
 
 const REUSABLE = ".github/workflows/auto-merge.yml";
-const CALLER = ".github/workflows/auto-merge-caller.yml";
 
 const FULL_SHA_RE = /@[0-9a-f]{40}\s+#\s+v[\d.]+\s*$/;
 
@@ -104,18 +103,16 @@ function fail(path: string, message: string): void {
 }
 
 const reusable = load(REUSABLE);
-const caller = load(CALLER);
 
 if (reusable.includes("pull_request_target:")) {
   fail(REUSABLE, "must not use pull_request_target");
 }
 
-if (caller.includes("pull_request_target:")) {
-  fail(CALLER, "must not use pull_request_target");
-}
-
-if (!caller.includes("types: [opened, synchronize, reopened, ready_for_review]")) {
-  fail(CALLER, "caller must use pull_request types opened, synchronize, reopened, ready_for_review");
+if (!reusable.includes("types: [opened, synchronize, reopened, ready_for_review]")) {
+  fail(
+    REUSABLE,
+    "must use pull_request types opened, synchronize, reopened, ready_for_review",
+  );
 }
 
 if (
@@ -198,8 +195,8 @@ if (!gateScript.includes("RELEASE_MAJOR_HOLD_LABEL")) {
   fail(".github/scripts/release-please-version-gate.ts", "must define release:major-hold label");
 }
 
-if (!reusable.includes("job.workflow_sha")) {
-  fail(REUSABLE, "script checkout must use job.workflow_sha");
+if (!reusable.includes("job.workflow_sha || github.sha")) {
+  fail(REUSABLE, "script checkout must use job.workflow_sha with github.sha fallback");
 }
 
 if (failed) {

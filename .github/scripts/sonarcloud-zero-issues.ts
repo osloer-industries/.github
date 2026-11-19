@@ -22,6 +22,7 @@ export interface SonarConfig {
   organization: string;
   issuesMinPollsBeforeSettle: number;
   issuesSettlePolls: number;
+  ceTaskId?: string;
 }
 
 export interface PullRequestAnalysis {
@@ -48,12 +49,23 @@ interface IssuesSearchPage {
 }
 
 interface CeActivityTask {
+  id?: string;
   status: string;
   type?: string;
   branch?: string;
   pullRequest?: string;
   componentKey?: string;
   errorMessage?: string;
+}
+
+interface CeTaskDetail {
+  task?: {
+    id?: string;
+    status?: string;
+    type?: string;
+    errorMessage?: string;
+    pullRequest?: string;
+  };
 }
 
 function basicAuthHeader(token: string): string {
@@ -131,6 +143,8 @@ export function parseConfigFromEnv(
 
   const issuesSettlePolls = parseIssueSettlePolls(env);
   const issuesMinPollsBeforeSettle = parseIssueMinPollsBeforeSettle(env);
+  const ceTaskIdRaw = (env.SONAR_CE_TASK_ID ?? "").trim();
+  const ceTaskId = ceTaskIdRaw.length > 0 ? ceTaskIdRaw : undefined;
   if (issuesMinPollsBeforeSettle < issuesSettlePolls) {
     console.error(
       "::error::SONAR_ISSUES_MIN_POLLS must be at least SONAR_ISSUES_SETTLE_POLLS so the gate cannot pass on the first stable empty snapshot.",
@@ -154,6 +168,7 @@ export function parseConfigFromEnv(
     organization,
     issuesSettlePolls,
     issuesMinPollsBeforeSettle,
+    ceTaskId,
   };
 }
 
@@ -246,6 +261,19 @@ export function latestFailedCeForPullRequest(
   return undefined;
 }
 
+export function normalizeCeStatus(status: string | undefined): string {
+  return (status ?? "").trim().toUpperCase();
+}
+
+export function isTerminalCeStatus(status: string | undefined): boolean {
+  const normalized = normalizeCeStatus(status);
+  return (
+    normalized === "SUCCESS" ||
+    normalized === "FAILED" ||
+    normalized === "CANCELED"
+  );
+}
+
 export function hasInProgressCeForPullRequest(
   tasks: CeActivityTask[],
   pullRequestNumber: number,
@@ -255,12 +283,73 @@ export function hasInProgressCeForPullRequest(
     if (task.pullRequest !== key) {
       continue;
     }
-    const status = (task.status ?? "").toUpperCase();
-    if (status === "PENDING" || status === "IN_PROGRESS") {
+    const normalized = normalizeCeStatus(task.status);
+    if (normalized === "PENDING" || normalized === "IN_PROGRESS") {
       return true;
     }
   }
   return false;
+}
+
+export function findSuccessfulReportCeTaskForPullRequest(
+  tasks: CeActivityTask[],
+  pullRequestNumber: number,
+): CeActivityTask | undefined {
+  const key = String(pullRequestNumber);
+  for (const task of tasks) {
+    if (task.pullRequest !== key) {
+      continue;
+    }
+    const type = (task.type ?? "REPORT").toUpperCase();
+    if (type !== "REPORT") {
+      continue;
+    }
+    if (normalizeCeStatus(task.status) === "SUCCESS") {
+      return task;
+    }
+  }
+  return undefined;
+}
+
+export function findCeTaskIdForPullRequest(
+  tasks: CeActivityTask[],
+  pullRequestNumber: number,
+): string | undefined {
+  const key = String(pullRequestNumber);
+  for (const task of tasks) {
+    if (task.pullRequest !== key) {
+      continue;
+    }
+    const id = task.id?.trim() ?? "";
+    if (id.length > 0) {
+      return id;
+    }
+  }
+  return undefined;
+}
+
+export async function fetchCeTask(
+  config: Pick<SonarConfig, "host" | "token">,
+  taskId: string,
+  fetchImpl: FetchLike,
+): Promise<CeTaskDetail> {
+  const path = `/api/ce/task?id=${encodeURIComponent(taskId)}`;
+  return sonarGetJson<CeTaskDetail>(config.host, config.token, path, fetchImpl);
+}
+
+export function assertCeTaskSucceeded(
+  pullRequestNumber: number,
+  status: string | undefined,
+  errorMessage?: string,
+): void {
+  const normalized = normalizeCeStatus(status);
+  if (normalized === "SUCCESS") {
+    return;
+  }
+  const detail = errorMessage?.trim() || "no error message";
+  throw new Error(
+    `SonarCloud compute-engine task for pull request ${pullRequestNumber} ended with status ${normalized || "UNKNOWN"}: ${detail}`,
+  );
 }
 
 export function issueSetFingerprint(issues: readonly SonarIssue[]): string {
@@ -275,6 +364,118 @@ export interface WaitOptions {
   now?: () => number;
 }
 
+function logPullRequestAnalysisWait(
+  config: SonarConfig,
+  entry: PullRequestAnalysis | undefined,
+): void {
+  if (entry) {
+    const seenSha = entry.commit?.sha ?? "(none)";
+    console.log(
+      `Waiting for SonarCloud to finish analysing head ${config.headSha}; latest PR analysis commit is ${seenSha}.`,
+    );
+    return;
+  }
+  console.log(
+    `Waiting for SonarCloud to register pull request ${config.pullRequestNumber} on project ${config.projectKey}.`,
+  );
+}
+
+function logHeadRegisteredCeWait(
+  config: SonarConfig,
+  ceTasks: CeActivityTask[],
+): void {
+  if (hasInProgressCeForPullRequest(ceTasks, config.pullRequestNumber)) {
+    console.log(
+      `SonarCloud PR #${config.pullRequestNumber} head commit is registered but compute engine is still running.`,
+    );
+    return;
+  }
+  console.log(
+    `SonarCloud PR #${config.pullRequestNumber} head commit ${config.headSha} is registered; waiting for compute-engine SUCCESS before reading issues.`,
+  );
+}
+
+async function resolveAnalysisWhenHeadMatches(
+  config: SonarConfig,
+  entry: PullRequestAnalysis,
+  ceTasks: CeActivityTask[],
+  fetchImpl: FetchLike,
+): Promise<PullRequestAnalysis | null> {
+  if (findSuccessfulReportCeTaskForPullRequest(ceTasks, config.pullRequestNumber)) {
+    console.log(
+      `SonarCloud PR #${config.pullRequestNumber} has a successful REPORT compute-engine task for commit ${config.headSha}.`,
+    );
+    return entry;
+  }
+
+  const taskId =
+    config.ceTaskId ?? findCeTaskIdForPullRequest(ceTasks, config.pullRequestNumber);
+  if (!taskId) {
+    logHeadRegisteredCeWait(config, ceTasks);
+    return null;
+  }
+
+  const detail = await fetchCeTask(config, taskId, fetchImpl);
+  const status = detail.task?.status;
+  if (normalizeCeStatus(status) === "SUCCESS") {
+    console.log(
+      `SonarCloud compute-engine task ${taskId} succeeded for PR #${config.pullRequestNumber} at commit ${config.headSha}.`,
+    );
+    return entry;
+  }
+  if (isTerminalCeStatus(status)) {
+    assertCeTaskSucceeded(
+      config.pullRequestNumber,
+      status,
+      detail.task?.errorMessage,
+    );
+  }
+  console.log(
+    `SonarCloud compute-engine task ${taskId} status is ${status ?? "unknown"}; waiting for SUCCESS.`,
+  );
+  return null;
+}
+
+async function waitForPullRequestAnalysisOnce(
+  config: SonarConfig,
+  fetchImpl: FetchLike,
+  sleepFn: (ms: number) => Promise<void>,
+  nowFn: () => number,
+): Promise<PullRequestAnalysis | null> {
+  if (nowFn() >= config.deadlineMs) {
+    return null;
+  }
+
+  const pullRequests = await listProjectPullRequests(config, fetchImpl);
+  const entry = findPullRequestForKey(pullRequests, config.pullRequestNumber);
+
+  const ceTasks = await fetchCeActivity(config, fetchImpl);
+  const failed = latestFailedCeForPullRequest(ceTasks, config.pullRequestNumber);
+  if (failed) {
+    const detail = failed.errorMessage?.trim() || "no error message";
+    throw new Error(
+      `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
+    );
+  }
+
+  if (entry && analysisMatchesHead(entry, config.headSha)) {
+    const ready = await resolveAnalysisWhenHeadMatches(
+      config,
+      entry,
+      ceTasks,
+      fetchImpl,
+    );
+    if (ready !== null) {
+      return ready;
+    }
+  }
+
+  logPullRequestAnalysisWait(config, entry);
+
+  await sleepFn(config.pollIntervalMs);
+  return waitForPullRequestAnalysisOnce(config, fetchImpl, sleepFn, nowFn);
+}
+
 export async function waitForPullRequestAnalysis(
   config: SonarConfig,
   fetchImpl: FetchLike,
@@ -284,51 +485,14 @@ export async function waitForPullRequestAnalysis(
     options.sleep ??
     ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const nowFn = options.now ?? (() => Date.now());
-
-  while (nowFn() < config.deadlineMs) {
-    const pullRequests = await listProjectPullRequests(config, fetchImpl);
-    const entry = findPullRequestForKey(
-      pullRequests,
-      config.pullRequestNumber,
-    );
-
-    const ceTasks = await fetchCeActivity(config, fetchImpl);
-    const failed = latestFailedCeForPullRequest(
-      ceTasks,
-      config.pullRequestNumber,
-    );
-    if (failed) {
-      const detail = failed.errorMessage?.trim() || "no error message";
-      throw new Error(
-        `SonarCloud compute engine task for pull request ${config.pullRequestNumber} ended with status ${failed.status}: ${detail}`,
-      );
-    }
-
-    if (entry && analysisMatchesHead(entry, config.headSha)) {
-      if (hasInProgressCeForPullRequest(ceTasks, config.pullRequestNumber)) {
-        console.log(
-          `SonarCloud PR #${config.pullRequestNumber} head commit is registered but compute engine is still running; waiting for issue indexing.`,
-        );
-      } else {
-        console.log(
-          `SonarCloud PR #${config.pullRequestNumber} analysis is ready for commit ${config.headSha} (analysisDate=${entry.analysisDate ?? "unknown"}).`,
-        );
-        return entry;
-      }
-    }
-
-    if (entry) {
-      const seenSha = entry.commit?.sha ?? "(none)";
-      console.log(
-        `Waiting for SonarCloud to finish analysing head ${config.headSha}; latest PR analysis commit is ${seenSha}.`,
-      );
-    } else {
-      console.log(
-        `Waiting for SonarCloud to register pull request ${config.pullRequestNumber} on project ${config.projectKey}.`,
-      );
-    }
-
-    await sleepFn(config.pollIntervalMs);
+  const entry = await waitForPullRequestAnalysisOnce(
+    config,
+    fetchImpl,
+    sleepFn,
+    nowFn,
+  );
+  if (entry !== null) {
+    return entry;
   }
 
   const waitedMinutes = Math.max(
@@ -362,10 +526,28 @@ export function sonarIssuesPageUrl(
   );
 }
 
+export function issuesSearchPath(
+  config: Pick<
+    SonarConfig,
+    "host" | "projectKey" | "pullRequestNumber" | "organization"
+  >,
+  page: number,
+  pageSize: number,
+): string {
+  return (
+    `/api/issues/search?organization=${encodeURIComponent(config.organization)}` +
+    `&componentKeys=${encodeURIComponent(config.projectKey)}` +
+    `&pullRequest=${encodeURIComponent(String(config.pullRequestNumber))}` +
+    "&issueStatuses=OPEN,CONFIRMED" +
+    "&resolved=false" +
+    `&ps=${pageSize}&p=${page}`
+  );
+}
+
 export async function fetchOpenIssues(
   config: Pick<
     SonarConfig,
-    "host" | "token" | "projectKey" | "pullRequestNumber"
+    "host" | "token" | "projectKey" | "pullRequestNumber" | "organization"
   >,
   fetchImpl: FetchLike,
 ): Promise<SonarIssue[]> {
@@ -375,11 +557,7 @@ export async function fetchOpenIssues(
   let total = Number.POSITIVE_INFINITY;
 
   while (collected.length < total) {
-    const path =
-      `/api/issues/search?componentKeys=${encodeURIComponent(config.projectKey)}` +
-      `&pullRequest=${encodeURIComponent(String(config.pullRequestNumber))}` +
-      "&issueStatuses=OPEN,CONFIRMED" +
-      `&ps=${pageSize}&p=${page}`;
+    const path = issuesSearchPath(config, page, pageSize);
     const data = await sonarGetJson<IssuesSearchPage & { paging?: { total?: number } }>(
       config.host,
       config.token,
@@ -400,7 +578,6 @@ export async function fetchOpenIssues(
 
 const DEFAULT_ISSUE_SETTLE_POLLS = 3;
 const DEFAULT_ISSUE_MIN_POLLS = 3;
-
 function parseIssueSettlePolls(env: NodeJS.ProcessEnv): number {
   const raw = Number(env.SONAR_ISSUES_SETTLE_POLLS ?? String(DEFAULT_ISSUE_SETTLE_POLLS));
   if (!Number.isInteger(raw) || raw < 1) {
@@ -432,7 +609,10 @@ interface IssueSettleState {
 export async function fetchOpenIssuesWhenSettled(
   config: SonarConfig,
   fetchImpl: FetchLike,
-  options: WaitOptions & { settlePolls?: number; minPollsBeforeSettle?: number } = {},
+  options: WaitOptions & {
+    settlePolls?: number;
+    minPollsBeforeSettle?: number;
+  } = {},
 ): Promise<SonarIssue[]> {
   const sleepFn =
     options.sleep ??

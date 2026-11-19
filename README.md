@@ -10,7 +10,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | --- | --- |
 | [semantic-pull-request.yml](.github/workflows/semantic-pull-request.yml) | Conventional Commit pull request titles |
 | [codeql-javascript-typescript.yml](.github/workflows/codeql-javascript-typescript.yml) | CodeQL for JS/TS (optional SARIF artifact mode without Code Scanning upload) |
-| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (high severity) |
+| [dependency-review.yml](.github/workflows/dependency-review.yml) | Pull request dependency review (`mode: auto` — GitHub on public repos, OSV-Scanner PR on private) |
 | [release-please.yml](.github/workflows/release-please.yml) | Release Please (reusable) |
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
@@ -23,13 +23,28 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 
 ### CodeQL SARIF security gate (artifact mode)
 
-When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs an inlined TypeScript gate (Node 24, no npm install in callers). Source of truth: [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts). Keep the inline copy in the workflow synchronized with `node .github/scripts/codeql-gate-inline.ts --write` / `--check`. Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml). This repository’s [`ci.yml`](.github/workflows/ci.yml) also runs `codeql-gate-inline.ts --check` on every PR/push so drift is caught outside the CodeQL gate workflow.
+When `code-scanning-upload` is `false`, the reusable CodeQL workflow uploads SARIF as a workflow artifact and runs [`.github/scripts/codeql-sarif-security-gate.ts`](.github/scripts/codeql-sarif-security-gate.ts) (Node 24, sparse-checked out from this repository at **`job.workflow_sha`**). Fixture and live tests run from [`.github/workflows/codeql-gate-ci.yml`](.github/workflows/codeql-gate-ci.yml).
 
 Optional `workflow-security.yml` inputs: `min-severity` and `min-confidence` (default empty — report all findings). Invalid values fail closed. See [docs/consuming-workflows.md](docs/consuming-workflows.md).
 
+### Dependency review (GHAS-free on private repos)
+
+Reusable [`dependency-review.yml`](.github/workflows/dependency-review.yml) uses job-level backends so nested reusables are valid. Input `mode` defaults to `auto`: **public** repos run GitHub’s [dependency-review-action](https://github.com/actions/dependency-review-action); **private** repos call Google’s maintained [OSV-Scanner PR workflow](https://google.github.io/osv-scanner/github-action/) (`upload-sarif: false`, `fail-on-vuln: true`). Override with `mode: github` or `mode: osv`.
+
+Check names (stable for branch protection):
+
+| Mode | Required check |
+| --- | --- |
+| `github` / `auto` on public | **`Review dependency changes`** (one gate job; nested **`OSV PR scan (private repos only)`** skipped) |
+| `osv` / `auto` on private | **`Review dependency changes`** gate after **`OSV PR scan (private repos only)`** |
+
+Private OSV path (no GHAS SARIF upload): Google’s nested **`osv-scanner-reusable-pr.yml`** runs with `upload-sarif: false` and `fail-on-vuln: false` so it always publishes scan outputs. The gate job re-uploads SARIF as workflow artifact **`osv-sarif-${{ github.run_id }}`** (same `actions/upload-artifact` pin as CodeQL artifact mode) and enforces new vulnerabilities with **`osv-reporter-action`**. Google also uploads **`OSV Scanner SARIF file`** (5-day retention) from the nested job. Download **`osv-sarif-*`** on the workflow run for triage, like CodeQL’s **`codeql-sarif-*`**.
+
+OSV’s default recursive scan picks up npm **`package-lock.json`** and Bun **`bun.lock`** lockfiles in the caller repo (see [OSV GitHub Action docs](https://google.github.io/osv-scanner/github-action/)).
+
 ### SonarCloud zero open issues
 
-SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, waits for the compute engine to finish, then requires a stable `api/issues/search` snapshot before failing on non-zero `issueStatuses=OPEN,CONFIRMED`. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
+SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts (ratings only). Reusable [`sonarcloud-zero-issues.yml`](.github/workflows/sonarcloud-zero-issues.yml) polls until the pull request head commit is analysed, waits for the compute engine to finish, then polls `api/ce/task` (caller-supplied `ceTaskId` from `report-task.txt`, or the pull-request REPORT task from `api/ce/activity`) until **SUCCESS**, then requires a stable `api/issues/search` snapshot (`organization`, `resolved=false`, `issueStatuses=OPEN,CONFIRMED`) before failing on non-zero issues. Script: [`.github/scripts/sonarcloud-zero-issues.ts`](.github/scripts/sonarcloud-zero-issues.ts). The reusable workflow checks out the gate script at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin). Register the job **`SonarCloud zero open issues`** as a required status check in the org ruleset after adopters add the caller workflow.
 
 ### Mutation (changed src)
 

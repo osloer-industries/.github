@@ -27,6 +27,12 @@ on:
         description: Minimum open-issue API polls before a stable result can pass (avoids post-analysis index lag)
         type: number
         default: 3
+      ce-task-id:
+        description: >
+          Sonar compute-engine task id (ceTaskId from report-task.txt). When set, the gate polls
+          api/ce/task until SUCCESS before issues/search.
+        type: string
+        default: ""
     secrets:
       SONAR_TOKEN:
         description: SonarCloud user token with permission to read issues for the project
@@ -60,6 +66,7 @@ jobs:
           SONAR_POLL_INTERVAL_SECONDS: ${{ inputs.poll-interval-seconds }}
           SONAR_ISSUES_SETTLE_POLLS: ${{ inputs.issues-settle-polls }}
           SONAR_ISSUES_MIN_POLLS: ${{ inputs.issues-min-polls }}
+          SONAR_CE_TASK_ID: ${{ inputs.ce-task-id }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}

@@ -53,7 +53,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 
 | Workflow file | Check name(s) | Caller triggers |
 | --- | --- | --- |
-| `semantic-pull-request.yml` | Semantic pull request | `pull_request_target` (types: opened, reopened, edited, synchronize) |
+| `semantic-pull-request.yml` | Semantic pull request | `pull_request` (types: opened, reopened, edited, synchronize) |
 | `codeql-javascript-typescript.yml` | Analyze JavaScript and TypeScript | `pull_request`, `push` to default branch, optional weekly `schedule` |
 | `dependency-review.yml` | Review dependency changes | `pull_request` |
 | `release-please.yml` | Prepare or publish release | `push` to default branch, `workflow_dispatch` |
@@ -99,6 +99,7 @@ Allowed values match the pinned `zizmor-action` (`informational`, `low`, `medium
 | `sonarcloud-zero-issues.yml` | `poll-interval-seconds` | `10` | Delay between SonarCloud API polls |
 | `sonarcloud-zero-issues.yml` | `issues-settle-polls` | `3` | Consecutive matching open-issue API pages before enforcing zero issues |
 | `sonarcloud-zero-issues.yml` | `issues-min-polls` | `3` | Minimum issue API polls before a stable empty snapshot can pass |
+| `sonarcloud-zero-issues.yml` | `ce-task-id` | *(empty)* | Sonar `ceTaskId` from `report-task.txt` (`sonarqube-cloud-node.yml` job output `ce-task-id`); polls `api/ce/task` until SUCCESS |
 | `node-setup-smoke.yml` | `package-manager` | `npm` | `npm` or `bun` for install and setup script |
 | `node-setup-smoke.yml` | `bun-version-file` | `""` | Optional Bun version file when `package-manager: bun` |
 | `node-setup-smoke.yml` | `project-root` | `""` | Optional subdirectory for install and run (empty = repo root) |
@@ -139,7 +140,7 @@ jobs:
 
 Omit `package-manager` (or set `npm`) to keep existing npm behavior unchanged.
 
-This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit; same-repo `uses:`/`@{{ github.sha }}` fail actionlint/zizmor).
+This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** via mirrored steps aligned with `node-npm-quality.yml` and `node-setup-smoke.yml` on `test-fixtures/package-manager-smoke/{npm,bun}` (`github.sha` substitutes for `job.workflow_sha` when testing the current commit). Same-repo `workflow_call` with `uses: ./…` fails zizmor `self-repository`; `${{ github.sha }}` in `uses:` fails actionlint — so **Sonar zero open issues** is an **inlined** job in `ci.yml`, and **auto-merge** lists `pull_request` on the reusable workflow (no thin caller).
 
 ## Caller examples
 
@@ -149,7 +150,7 @@ This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** 
 name: Pull request title
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, edited, synchronize]
 
 permissions:
@@ -220,13 +221,52 @@ Download the `codeql-sarif-*` workflow artifact for the full SARIF when triaging
 
 Default `queries` is `security-and-quality`. Callers that previously inlined `security-extended` should pass `queries: security-extended` only when that broader query suite is documented for the repo (e.g. coast-fire-visualizer migration).
 
-The security gate is **inlined in the reusable workflow** (a `run:` step that writes an embedded TypeScript heredoc to a temp file and runs it with Node 24), so it always executes from the same commit the caller pins—no checkout of this repository and no caller-local action path. The editable source of truth is `.github/scripts/codeql-sarif-security-gate.ts`; CI fails if that file and the inline copy diverge (`node .github/scripts/codeql-gate-inline.ts --check`). After editing the script, run `node .github/scripts/codeql-gate-inline.ts --write` before committing.
+The security gate runs `.github/scripts/codeql-sarif-security-gate.ts` after a sparse checkout of `osloer-industries/.github` at **`job.workflow_sha`** (the commit in the caller’s `uses:` pin), so consumers execute the same script this repository tests—no caller-local copy.
 
 The gate resolves CodeQL rules from the SARIF driver and query-pack extensions, honors `result.rule` index references, and falls back to each rule’s `defaultConfiguration.level` when a result omits `level`. Missing SARIF files or unparseable SARIF fails the job.
 
-This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures, runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and mirrors the reusable artifact-mode steps on `test-fixtures/codeql-smoke` using the shipped inline gate (`run-shipped-codeql-gate.ts`). A cross-repository `workflow_call` smoke test is not run in this repo’s CI; verify that separately on a consumer such as `lunch-money` after bumping the reusables SHA.
+This repository’s `codeql-gate-ci.yml` workflow exercises the gate against SARIF fixtures (`run-shipped-codeql-gate.ts`), runs live CodeQL on an isolated vulnerable fixture (expecting the gate to fail), and mirrors the reusable artifact-mode steps on `test-fixtures/codeql-smoke` via the same sparse-checkout path. A cross-repository `workflow_call` smoke test is not run in this repo’s CI; verify that separately on a consumer such as `lunch-money` after bumping the reusables SHA.
 
 ### Dependency review
+
+Input **`mode`** (default **`auto`**) picks the backend. The nested Google reusable stays on a dedicated job (GitHub requires job-level `uses:`). All enforcement runs in a single gate job named **`Review dependency changes`**.
+
+| `mode` | Behavior |
+| --- | --- |
+| `auto` | GitHub [dependency-review-action](https://github.com/actions/dependency-review-action) on **public** repos; [Google OSV-Scanner PR reusable](https://google.github.io/osv-scanner/github-action/) on **private** repos (`upload-sarif: false`, `fail-on-vuln: true` — no GHAS SARIF upload). |
+| `github` | Always dependency-review-action (`fail-on-severity` input, default `high`). |
+| `osv` | Always OSV-Scanner PR reusable (same GHAS-free settings). |
+
+**PR check names:**
+
+| Job name | When it appears |
+| --- | --- |
+| **Review dependency changes** | Always on valid modes — the required gate (GitHub Dependency Review, OSV reporter, or invalid-mode rejection). |
+| **OSV PR scan (private repos only)** | **Skipped** on public repos and on `mode: github`; **runs** on private / `mode: osv` before the gate job. |
+
+Invalid `mode` values fail closed inside **Review dependency changes** (no separate skipped job).
+
+**Private OSV SARIF (no Code Scanning upload):** The nested Google reusable runs with `upload-sarif: false` and `fail-on-vuln: false` so scan artifacts are always produced. The gate job:
+
+1. Re-uploads SARIF as **`osv-sarif-${{ github.run_id }}`** (`actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` — same pin as CodeQL artifact mode).
+2. Runs **`osv-reporter-action`** with `fail-on-vuln: true` (the required check outcome).
+
+The nested job also uploads **`OSV Scanner SARIF file`** (default `results.sarif`, **5-day** retention). Prefer **`osv-sarif-*`** on the workflow run for fleet-consistent triage (mirrors **`codeql-sarif-*`**).
+
+OSV uses its default recursive `scan-args` (`-r` + repo root), which scans lockfiles present in the caller tree — including npm **`package-lock.json`** and Bun **`bun.lock`**. No extra secrets.
+
+**Public** repos (template, homeexchange-mcp, vakt, de-invest-sync): default caller below.
+
+**Private** repos (coast-fire-visualizer, lunch-money-de-invest-sync): same caller; `auto` selects OSV automatically. Drop vendored `dependency-diff-audit.mjs` when migrating.
+
+**Caller job permissions (required):** Grant these on the job that `uses:` the reusable (not workflow-wide unless that job is the only job). GitHub validates nested reusables at workflow startup; `mode: auto` on a **public** repo still requires `security-events: write` because the nested Google OSV job is declared.
+
+| Permission | Why |
+| --- | --- |
+| `contents: read` | Checkout and dependency diff |
+| `actions: read` | Download nested workflow artifacts |
+| `pull-requests: read` | OSV follow-up job metadata |
+| `security-events: write` | Nested Google `osv-scan` (even when `upload-sarif: false`) |
 
 ```yaml
 name: Dependency review
@@ -234,19 +274,34 @@ name: Dependency review
 on:
   pull_request:
 
-permissions:
-  contents: read
-
 concurrency:
   group: dependency-review-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
     uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
 ```
 
-**Do not** replace [lunch-money-de-invest-sync](https://github.com/osloer-industries/lunch-money-de-invest-sync)’s GHAS-free `dependency-diff-audit.mjs` gate with this reusable. **Private** repos (e.g. coast-fire-visualizer): confirm the official dependency review action is available without paid GHAS before adding this caller; otherwise keep a local GHAS-free gate.
+Explicit OSV (optional — same as `auto` on a private repo):
+
+```yaml
+jobs:
+  review:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
+    uses: osloer-industries/.github/.github/workflows/dependency-review.yml@REUSABLES_SHA # v0.x.y
+    with:
+      mode: osv
+```
 
 ### Release Please
 
@@ -346,11 +401,13 @@ jobs:
   zero-open-issues:
     needs: analyze
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
+    with:
+      ce-task-id: ${{ needs.analyze.outputs.ce-task-id }}
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate polls until the head commit appears on `api/project_pull_requests/list`.
+Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate waits until the head commit appears on `api/project_pull_requests/list` **and** a pull-request REPORT compute-engine task reaches **SUCCESS** (via `api/ce/activity` / `api/ce/task`).
 
 Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). No extra inputs such as `reusables-ref` are required.
 
@@ -489,7 +546,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
-`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s caller [`.github/workflows/auto-merge-caller.yml`](.github/workflows/auto-merge-caller.yml) uses `merge` because release tags are created from merge commits here.
+`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s [`.github/workflows/auto-merge.yml`](.github/workflows/auto-merge.yml) direct `pull_request` trigger uses merge method `merge` (via input fallback) because release tags are created from merge commits here.
 
 Rely on org rulesets / branch protection **required status checks** so auto-merge does not complete until every gate is green. In practice register only **`ci-passed`** as required (see below); auto-merge then waits for that single aggregate check.
 
