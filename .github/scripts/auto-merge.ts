@@ -313,6 +313,25 @@ function ensureMajorHoldLabel(cfg: AutoMergeEnv, reason: string): void {
   console.log(`Applied label ${RELEASE_MAJOR_HOLD_LABEL} to pull request #${cfg.prNumber}.`);
 }
 
+function pullRequestAutoMergeEnabled(cfg: AutoMergeEnv): boolean {
+  const result = gh(
+    ["pr", "view", String(cfg.prNumber), "--json", "autoMergeRequest"],
+    cfg.token,
+    cfg.repository,
+  );
+  if (!result.ok) {
+    console.error(`::error::Failed to read pull request auto-merge state: ${result.stderr.trim()}`);
+    process.exit(1);
+  }
+  try {
+    const body = JSON.parse(result.stdout) as { autoMergeRequest?: unknown };
+    return body.autoMergeRequest !== null && body.autoMergeRequest !== undefined;
+  } catch {
+    console.error("::error::Failed to parse pull request auto-merge JSON from gh.");
+    process.exit(1);
+  }
+}
+
 function enableAutoMerge(cfg: AutoMergeEnv): void {
   const args = ["pr", "merge", String(cfg.prNumber), "--auto", `--${cfg.mergeMethod}`];
   const result = gh(args, cfg.token, cfg.repository);
@@ -323,10 +342,28 @@ function enableAutoMerge(cfg: AutoMergeEnv): void {
   console.log(`Enabled auto-merge for pull request #${cfg.prNumber} (${cfg.mergeMethod}).`);
 }
 
+function disableAutoMerge(cfg: AutoMergeEnv): void {
+  if (!pullRequestAutoMergeEnabled(cfg)) {
+    console.log("Pull request does not have auto-merge enabled; nothing to disable.");
+    return;
+  }
+  const result = gh(
+    ["pr", "merge", String(cfg.prNumber), "--disable-auto"],
+    cfg.token,
+    cfg.repository,
+  );
+  if (!result.ok) {
+    console.error(`::error::Failed to disable auto-merge: ${result.stderr.trim()}`);
+    process.exit(1);
+  }
+  console.log(`Disabled auto-merge for pull request #${cfg.prNumber}.`);
+}
+
 export function runAutoMerge(cfg: AutoMergeEnv): void {
   const decision = evaluateEligibility(cfg);
   if (!decision.eligible) {
     console.log(`Skipping auto-merge: ${decision.reason}`);
+    disableAutoMerge(cfg);
     return;
   }
 
@@ -334,6 +371,7 @@ export function runAutoMerge(cfg: AutoMergeEnv): void {
     const files = fetchPullRequestFiles(cfg);
     if (!releasePrFilesEligible(files)) {
       console.log("Skipping auto-merge: release PR changed files are outside the allowlist or version-only contract.");
+      disableAutoMerge(cfg);
       return;
     }
     const versionGate = evaluateReleaseVersionGate(files, cfg.prBody);
@@ -343,6 +381,7 @@ export function runAutoMerge(cfg: AutoMergeEnv): void {
       if ("majorHold" in versionGate && versionGate.majorHold) {
         ensureMajorHoldLabel(cfg, versionGate.reason);
       }
+      disableAutoMerge(cfg);
       return;
     }
   }

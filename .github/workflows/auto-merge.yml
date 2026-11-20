@@ -54,12 +54,23 @@ jobs:
           sparse-checkout: |
             .github/scripts/auto-merge.ts
             .github/scripts/auto-merge-eligibility.ts
+            .github/scripts/auto-merge-repository-preflight.ts
             .github/scripts/dependabot-auto-merge-preflight.ts
             .github/scripts/release-please-version-gate.ts
           sparse-checkout-cone-mode: true
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Repository auto-merge safety preflight
+        id: repository-preflight
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node reusables/.github/scripts/auto-merge-repository-preflight.ts
       - name: Dependabot pull request preflight
         if: >-
+          steps.repository-preflight.outputs.proceed == 'true' &&
           inputs.allow-dependabot != false &&
           github.event.pull_request.user.login == 'dependabot[bot]'
         id: dependabot-preflight
@@ -70,6 +81,7 @@ jobs:
         run: node reusables/.github/scripts/dependabot-auto-merge-preflight.ts
       - name: Dependabot metadata
         if: >-
+          steps.repository-preflight.outputs.proceed == 'true' &&
           inputs.allow-dependabot != false &&
           github.event.pull_request.user.login == 'dependabot[bot]' &&
           steps.dependabot-preflight.outputs.proceed == 'true'
@@ -77,10 +89,8 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "24"
       - name: Check auto-merge eligibility
+        if: steps.repository-preflight.outputs.proceed == 'true'
         id: auto-merge-eligibility
         env:
           AUTO_MERGE_ELIGIBILITY_ONLY: "true"
@@ -88,7 +98,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_METHOD: ${{ inputs.merge-method || 'merge' }}
+          MERGE_METHOD: ${{ inputs.merge-method || (github.repository == 'osloer-industries/.github' && 'merge') || 'squash' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
           DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}
@@ -96,7 +106,12 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node reusables/.github/scripts/auto-merge.ts
       - name: Mint osloer-reviewer installation token
-        if: steps.auto-merge-eligibility.outputs.eligible == 'true'
+        if: >-
+          steps.repository-preflight.outputs.proceed == 'true' &&
+          (
+            github.event.pull_request.user.login == 'dependabot[bot]' ||
+            github.event.pull_request.user.login == 'osloer-reviewer[bot]'
+          )
         id: release-app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -107,15 +122,20 @@ jobs:
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
-      - name: Approve and enable auto-merge
-        if: steps.auto-merge-eligibility.outputs.eligible == 'true'
+      - name: Sync auto-merge state
+        if: >-
+          steps.repository-preflight.outputs.proceed == 'true' &&
+          (
+            github.event.pull_request.user.login == 'dependabot[bot]' ||
+            github.event.pull_request.user.login == 'osloer-reviewer[bot]'
+          )
         env:
           GITHUB_APP_TOKEN: ${{ steps.release-app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_METHOD: ${{ inputs.merge-method || 'merge' }}
+          MERGE_METHOD: ${{ inputs.merge-method || (github.repository == 'osloer-industries/.github' && 'merge') || 'squash' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
           DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}

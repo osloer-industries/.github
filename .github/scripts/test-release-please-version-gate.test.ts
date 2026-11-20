@@ -60,6 +60,35 @@ test("parseManifestVersionChangesFromPatch patch bump", () => {
   assert.equal(parseManifestVersionChangesFromPatch(undefined), null);
 });
 
+test("evaluateReleaseVersionGate blocks pre-1.0 minor without breaking markers", () => {
+  const gatePreMinor = evaluateReleaseVersionGate(
+    [
+      { filename: ".release-please-manifest.json", patch: minorManifest },
+      { filename: "CHANGELOG.md" },
+    ],
+    "feat: widgets",
+  );
+  assert.equal(gatePreMinor.autoMerge, false);
+  if (!gatePreMinor.autoMerge && "majorHold" in gatePreMinor) {
+    assert.equal(gatePreMinor.majorHold, false);
+  }
+});
+
+test("evaluateReleaseVersionGate patch and minor auto-merge at 1.0+", () => {
+  const postOneMinor = `@@
+-  ".": "1.0.0"
++  ".": "1.1.0"
+`;
+  const gatePostOne = evaluateReleaseVersionGate(
+    [
+      { filename: ".release-please-manifest.json", patch: postOneMinor },
+      { filename: "CHANGELOG.md" },
+    ],
+    "feat",
+  );
+  assert.equal(gatePostOne.autoMerge, true);
+});
+
 test("evaluateReleaseVersionGate patch and minor auto-merge", () => {
   const gatePatch = evaluateReleaseVersionGate(
     [
@@ -69,15 +98,6 @@ test("evaluateReleaseVersionGate patch and minor auto-merge", () => {
     "chore: release 0.1.2",
   );
   assert.equal(gatePatch.autoMerge, true);
-
-  const gateMinor = evaluateReleaseVersionGate(
-    [
-      { filename: ".release-please-manifest.json", patch: minorManifest },
-      { filename: "CHANGELOG.md" },
-    ],
-    "feat: widgets",
-  );
-  assert.equal(gateMinor.autoMerge, true);
 });
 
 test("evaluateReleaseVersionGate major hold", () => {

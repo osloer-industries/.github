@@ -62,6 +62,10 @@ function scriptCallsGhPrMergeAuto(script: string): boolean {
   );
 }
 
+function scriptCallsGhPrMergeDisableAuto(script: string): boolean {
+  return script.includes('"--disable-auto"') && script.includes("gh(");
+}
+
 function reusableChecksOutCallerPrCode(yaml: string): boolean {
   const lines = yaml.split("\n");
   let inCheckoutStep = false;
@@ -128,6 +132,18 @@ if (!reusable.includes("dependabot-auto-merge-preflight.ts")) {
   fail(REUSABLE, "must sparse-checkout dependabot-auto-merge-preflight.ts");
 }
 
+if (!reusable.includes("auto-merge-repository-preflight.ts")) {
+  fail(REUSABLE, "must sparse-checkout auto-merge-repository-preflight.ts");
+}
+
+if (!reusable.includes("id: repository-preflight")) {
+  fail(REUSABLE, "must run repository ci-passed safety preflight before eligibility");
+}
+
+if (!reusable.includes("steps.repository-preflight.outputs.proceed == 'true'")) {
+  fail(REUSABLE, "downstream steps must gate on repository safety preflight proceed");
+}
+
 if (!reusable.includes("id: dependabot-preflight")) {
   fail(REUSABLE, "must run Dependabot pull request preflight before fetch-metadata");
 }
@@ -172,6 +188,14 @@ if (!reusable.includes("gh pr merge") && !reusable.includes("auto-merge.ts")) {
 const script = load(".github/scripts/auto-merge.ts");
 if (!scriptCallsGhPrMergeAuto(script)) {
   fail(".github/scripts/auto-merge.ts", 'must call gh(["pr", "merge", ..., "--auto", ...]) only');
+}
+
+if (!scriptCallsGhPrMergeDisableAuto(script)) {
+  fail(".github/scripts/auto-merge.ts", 'must call gh pr merge --disable-auto when eligibility fails');
+}
+
+if (!reusable.includes("Sync auto-merge state")) {
+  fail(REUSABLE, "final step must sync auto-merge (enable or disable)");
 }
 
 if (reusable.includes("persist-credentials: true")) {

@@ -4,6 +4,7 @@ import {
   assessDependabotPullRequest,
   dependabotCommitsTrustworthy,
   parseDependabotCommitMetadata,
+  semverLevelsInMessage,
 } from "./dependabot-auto-merge-preflight.ts";
 
 test("dependabotCommitsTrustworthy rejects mixed authors", () => {
@@ -34,6 +35,32 @@ dependency-group: dev-dependencies`;
     updateType: "version-update:semver-minor",
     dependencyGroup: "dev-dependencies",
   });
+});
+
+test("semverLevelsInMessage detects grouped majors", () => {
+  const message = `Bump deps
+
+version-update:semver-patch
+version-update:semver-major
+dependency-group: dev-dependencies`;
+  assert.ok(semverLevelsInMessage(message).has("major"));
+});
+
+test("assessDependabotPullRequest flags major in grouped commits", () => {
+  const result = assessDependabotPullRequest([
+    {
+      author: { login: "dependabot[bot]" },
+      commit: {
+        message: `Bump group
+
+version-update:semver-patch
+version-update:semver-major
+dependency-group: dev-dependencies`,
+      },
+    },
+  ]);
+  assert.equal(result.proceed, true);
+  assert.equal(result.updateType, "version-update:semver-major");
 });
 
 test("assessDependabotPullRequest skips untrusted commits", () => {

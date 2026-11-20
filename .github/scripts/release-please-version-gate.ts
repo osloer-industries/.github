@@ -272,5 +272,21 @@ export function evaluateReleaseVersionGate(
     );
   }
 
+  for (const change of changes) {
+    const fromParts = parseSemVer(change.from);
+    if (
+      fromParts !== null &&
+      fromParts.major === 0 &&
+      change.bump === "minor"
+    ) {
+      return {
+        autoMerge: false,
+        majorHold: false,
+        reason: `pre-1.0 component ${JSON.stringify(change.component)} minor release (${change.from} → ${change.to}) requires a human reviewer`,
+        changes,
+      };
+    }
+  }
+
   return { autoMerge: true, changes };
 }
