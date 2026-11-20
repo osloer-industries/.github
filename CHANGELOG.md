@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/osloer-industries/.github/compare/v0.1.7...v0.1.8) (2026-11-20)
+
+
+### Bug Fixes
+
+* **sonar:** HTTPS actionlint download and materialize CodeQL vulnerable fixture ([#43](https://github.com/osloer-industries/.github/issues/43)) ([4add839](https://github.com/osloer-industries/.github/commit/4add839ab564c6f62a86f768cf127732f0bf8e45))
+
 ## [0.1.7](https://github.com/osloer-industries/.github/compare/v0.1.6...v0.1.7) (2026-11-18)
 
 
