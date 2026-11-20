@@ -76,6 +76,37 @@ interface RulesetSummary {
   target?: string;
 }
 
+function pushNonEmpty(contexts: string[], value: string | undefined): void {
+  const trimmed = value?.trim();
+  if (trimmed !== undefined && trimmed.length > 0) {
+    contexts.push(trimmed);
+  }
+}
+
+function appendStatusCheckRows(
+  contexts: string[],
+  rows: RequiredStatusCheckRow[] | undefined,
+): void {
+  if (!Array.isArray(rows)) {
+    return;
+  }
+  for (const row of rows) {
+    pushNonEmpty(contexts, row.context);
+  }
+}
+
+function appendLegacyContextStrings(
+  contexts: string[],
+  values: string[] | undefined,
+): void {
+  if (!Array.isArray(values)) {
+    return;
+  }
+  for (const value of values) {
+    pushNonEmpty(contexts, value);
+  }
+}
+
 export function contextsFromRulesetRules(rules: RulesetRule[]): string[] {
   const contexts: string[] = [];
   for (const rule of rules) {
@@ -86,52 +117,38 @@ export function contextsFromRulesetRules(rules: RulesetRule[]): string[] {
     if (params === undefined) {
       continue;
     }
-    if (Array.isArray(params.required_status_checks)) {
-      for (const row of params.required_status_checks) {
-        const ctx = row.context?.trim();
-        if (ctx !== undefined && ctx.length > 0) {
-          contexts.push(ctx);
-        }
-      }
-    }
-    if (Array.isArray(params.contexts)) {
-      for (const ctx of params.contexts) {
-        const trimmed = ctx.trim();
-        if (trimmed.length > 0) {
-          contexts.push(trimmed);
-        }
-      }
+    appendStatusCheckRows(contexts, params.required_status_checks);
+    appendLegacyContextStrings(contexts, params.contexts);
+  }
+  return contexts;
+}
+
+function contextsFromProtectionChecks(rows: unknown): string[] {
+  const contexts: string[] = [];
+  if (!Array.isArray(rows)) {
+    return contexts;
+  }
+  for (const row of rows) {
+    if (row !== null && typeof row === "object") {
+      pushNonEmpty(contexts, (row as { context?: string }).context);
     }
   }
   return contexts;
 }
 
 export function contextsFromBranchProtection(payload: Record<string, unknown>): string[] {
-  const contexts: string[] = [];
   const block = payload.required_status_checks;
   if (block === null || typeof block !== "object") {
-    return contexts;
+    return [];
   }
   const checks = block as Record<string, unknown>;
-  const rows = checks.checks;
-  if (Array.isArray(rows)) {
-    for (const row of rows) {
-      if (row !== null && typeof row === "object") {
-        const ctx = (row as { context?: string }).context?.trim();
-        if (ctx !== undefined && ctx.length > 0) {
-          contexts.push(ctx);
-        }
-      }
-    }
-  }
-  const legacy = checks.contexts;
-  if (Array.isArray(legacy)) {
-    for (const ctx of legacy) {
-      if (typeof ctx === "string" && ctx.trim().length > 0) {
-        contexts.push(ctx.trim());
-      }
-    }
-  }
+  const contexts = contextsFromProtectionChecks(checks.checks);
+  appendLegacyContextStrings(
+    contexts,
+    Array.isArray(checks.contexts)
+      ? checks.contexts.filter((ctx): ctx is string => typeof ctx === "string")
+      : undefined,
+  );
   return contexts;
 }
 
