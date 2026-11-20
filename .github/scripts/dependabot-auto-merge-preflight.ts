@@ -73,24 +73,45 @@ export function dependabotCommitsTrustworthy(
   return { proceed: true };
 }
 
-const UPDATE_TYPE_RE =
-  /(^|\n)\s*version-update:semver-(patch|minor|major)(\s|$)/i;
+const UPDATE_TYPE_PREFIX = "version-update:semver-";
+const DEPENDENCY_GROUP_PREFIX = "dependency-group:";
 
-const DEPENDENCY_GROUP_RE = /(^|\n)\s*dependency-group:\s*([^\s]+)/i;
+function dependabotMetadataFromLine(line: string): {
+  updateType: string;
+  dependencyGroup: string;
+} {
+  const trimmed = line.trim();
+  if (trimmed.startsWith(UPDATE_TYPE_PREFIX)) {
+    const level = trimmed.slice(UPDATE_TYPE_PREFIX.length).trim().toLowerCase();
+    if (level === "patch" || level === "minor" || level === "major") {
+      return { updateType: trimmed, dependencyGroup: "" };
+    }
+  }
+  if (trimmed.startsWith(DEPENDENCY_GROUP_PREFIX)) {
+    const group = trimmed.slice(DEPENDENCY_GROUP_PREFIX.length).trim();
+    if (group.length > 0) {
+      return { updateType: "", dependencyGroup: group };
+    }
+  }
+  return { updateType: "", dependencyGroup: "" };
+}
 
 export function parseDependabotCommitMetadata(message: string): {
   updateType: string;
   dependencyGroup: string;
 } {
-  const updateMatch = UPDATE_TYPE_RE.exec(message);
-  const groupMatch = DEPENDENCY_GROUP_RE.exec(message);
-  const level = updateMatch?.[2]?.toLowerCase() ?? "";
-  const updateType =
-    level.length > 0 ? `version-update:semver-${level}` : "";
-  return {
-    updateType,
-    dependencyGroup: groupMatch?.[2]?.trim() ?? "",
-  };
+  let updateType = "";
+  let dependencyGroup = "";
+  for (const line of message.split("\n")) {
+    const parsed = dependabotMetadataFromLine(line);
+    if (parsed.updateType.length > 0) {
+      updateType = parsed.updateType;
+    }
+    if (parsed.dependencyGroup.length > 0) {
+      dependencyGroup = parsed.dependencyGroup;
+    }
+  }
+  return { updateType, dependencyGroup };
 }
 
 export function assessDependabotPullRequest(
