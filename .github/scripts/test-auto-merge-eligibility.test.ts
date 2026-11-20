@@ -32,6 +32,7 @@ test("dependabot update type eligibility", () => {
   assert.equal(dependabotUpdateEligible("version-update:semver-minor", ""), true);
   assert.equal(dependabotUpdateEligible("version-update:semver-major", ""), false);
   assert.equal(dependabotUpdateEligible("version-update:semver-major", "osloer-reusables"), false);
+  assert.equal(dependabotUpdateEligible("", "dev-dependencies"), false);
 });
 
 test("release PR filename allowlist", () => {
