@@ -1,3 +1,4 @@
 actionlint
 .github/node_modules/
 test-fixtures/**/node_modules/
+test-fixtures/codeql-vulnerable/code-injection.js
