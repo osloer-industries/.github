@@ -1,0 +1,184 @@
+#!/usr/bin/env node
+/**
+ * Avoid dependabot/fetch-metadata failures on ineligible Dependabot pull requests
+ * (mixed commit authors, tampered branches). Exits 0 with GitHub Actions outputs when
+ * metadata should not be fetched; exits 1 on genuine API failures.
+ */
+import { appendFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { DEPENDABOT_LOGIN } from "./auto-merge-eligibility.ts";
+
+const GH_BIN_CANDIDATES = ["/usr/bin/gh", "/bin/gh"] as const;
+
+export interface PullRequestCommitLike {
+  commit?: { message?: string };
+  author?: { login?: string | null };
+}
+
+function resolveGhBinary(): string {
+  for (const candidate of GH_BIN_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  console.error(
+    "::error::gh CLI not found at /usr/bin/gh or /bin/gh; install GitHub CLI on the runner.",
+  );
+  process.exit(1);
+}
+
+function ghApi(
+  path: string,
+  token: string,
+  repository: string,
+): { ok: boolean; stdout: string; stderr: string } {
+  const result = spawnSync(
+    resolveGhBinary(),
+    ["api", path, "--paginate"],
+    {
+      encoding: "utf8",
+      env: { ...process.env, GH_TOKEN: token, GITHUB_REPOSITORY: repository },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  return {
+    ok: result.status === 0,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
+
+export function dependabotCommitsTrustworthy(
+  commits: PullRequestCommitLike[],
+): { proceed: true } | { proceed: false; reason: string } {
+  if (commits.length === 0) {
+    return { proceed: false, reason: "Dependabot pull request has no commits." };
+  }
+  for (const commit of commits) {
+    const login = (commit.author?.login ?? "").trim();
+    if (login.length === 0) {
+      return {
+        proceed: false,
+        reason: "Dependabot pull request includes a commit with no GitHub author login.",
+      };
+    }
+    if (login.toLowerCase() !== DEPENDABOT_LOGIN.toLowerCase()) {
+      return {
+        proceed: false,
+        reason: `Dependabot pull request includes commits from ${JSON.stringify(login)}; skipping auto-merge metadata fetch.`,
+      };
+    }
+  }
+  return { proceed: true };
+}
+
+const UPDATE_TYPE_RE =
+  /(^|\n)\s*version-update:semver-(patch|minor|major)(\s|$)/i;
+
+const DEPENDENCY_GROUP_RE = /(^|\n)\s*dependency-group:\s*([^\s]+)/i;
+
+export function parseDependabotCommitMetadata(message: string): {
+  updateType: string;
+  dependencyGroup: string;
+} {
+  const updateMatch = UPDATE_TYPE_RE.exec(message);
+  const groupMatch = DEPENDENCY_GROUP_RE.exec(message);
+  const level = updateMatch?.[2]?.toLowerCase() ?? "";
+  const updateType =
+    level.length > 0 ? `version-update:semver-${level}` : "";
+  return {
+    updateType,
+    dependencyGroup: groupMatch?.[2]?.trim() ?? "",
+  };
+}
+
+export function assessDependabotPullRequest(
+  commits: PullRequestCommitLike[],
+): {
+  proceed: boolean;
+  reason: string;
+  updateType: string;
+  dependencyGroup: string;
+} {
+  const trust = dependabotCommitsTrustworthy(commits);
+  if (!trust.proceed) {
+    return {
+      proceed: false,
+      reason: trust.reason,
+      updateType: "",
+      dependencyGroup: "",
+    };
+  }
+  const newest = commits.at(-1)?.commit?.message ?? "";
+  const metadata = parseDependabotCommitMetadata(newest);
+  return {
+    proceed: true,
+    reason: "",
+    ...metadata,
+  };
+}
+
+function writeOutput(name: string, value: string): void {
+  const outputPath = (process.env.GITHUB_OUTPUT ?? "").trim();
+  if (outputPath.length === 0) {
+    return;
+  }
+  const escaped = value.replaceAll("\n", "%0A");
+  appendFileSync(outputPath, `${name}=${escaped}\n`, "utf8");
+}
+
+function main(): void {
+  const token = (process.env.GITHUB_TOKEN ?? "").trim();
+  const repository = (process.env.GITHUB_REPOSITORY ?? "").trim();
+  const prNumber = Number(process.env.PULL_REQUEST_NUMBER ?? "");
+  if (token.length === 0) {
+    console.error("::error::GITHUB_TOKEN is required.");
+    process.exit(1);
+  }
+  if (!repository.includes("/") || !Number.isInteger(prNumber) || prNumber <= 0) {
+    console.error("::error::GITHUB_REPOSITORY and PULL_REQUEST_NUMBER are required.");
+    process.exit(1);
+  }
+
+  const result = ghApi(
+    `repos/${repository}/pulls/${prNumber}/commits`,
+    token,
+    repository,
+  );
+  if (!result.ok) {
+    console.error(`::error::Failed to list pull request commits: ${result.stderr.trim()}`);
+    process.exit(1);
+  }
+
+  let commits: PullRequestCommitLike[];
+  try {
+    commits = JSON.parse(result.stdout) as PullRequestCommitLike[];
+    if (!Array.isArray(commits)) {
+      throw new TypeError("expected array");
+    }
+  } catch {
+    console.error("::error::Failed to parse pull request commits JSON from gh api.");
+    process.exit(1);
+  }
+
+  const decision = assessDependabotPullRequest(commits);
+  writeOutput("proceed", decision.proceed ? "true" : "false");
+  writeOutput("skip-reason", decision.reason);
+  writeOutput("update-type", decision.updateType);
+  writeOutput("dependency-group", decision.dependencyGroup);
+
+  if (!decision.proceed) {
+    console.log(`Skipping Dependabot metadata fetch: ${decision.reason}`);
+    return;
+  }
+  if (decision.updateType.length === 0) {
+    console.log(
+      "Dependabot commit metadata did not include a semver update type; eligibility check will decide.",
+    );
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

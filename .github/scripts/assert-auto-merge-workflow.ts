@@ -124,6 +124,18 @@ if (
   );
 }
 
+if (!reusable.includes("dependabot-auto-merge-preflight.ts")) {
+  fail(REUSABLE, "must sparse-checkout dependabot-auto-merge-preflight.ts");
+}
+
+if (!reusable.includes("id: dependabot-preflight")) {
+  fail(REUSABLE, "must run Dependabot pull request preflight before fetch-metadata");
+}
+
+if (!reusable.includes("steps.dependabot-preflight.outputs.proceed == 'true'")) {
+  fail(REUSABLE, "dependabot/fetch-metadata must run only when preflight proceed is true");
+}
+
 for (const { line, text } of linesWithUses(reusable)) {
   if (text.includes("uses: ./")) {
     continue;
