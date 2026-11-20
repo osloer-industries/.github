@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = fileURLToPath(
@@ -63,6 +64,10 @@ jobs:
           permission-contents: write
 `;
 
-assert.equal(run(GOOD), 0);
-assert.notEqual(run(BAD), 0);
-console.log("assert-release-please-app-token-permissions contract self-test OK");
+test("assert-release-please-app-token-permissions accepts workflows write", () => {
+  assert.equal(run(GOOD), 0);
+});
+
+test("assert-release-please-app-token-permissions rejects missing permissions", () => {
+  assert.notEqual(run(BAD), 0);
+});
