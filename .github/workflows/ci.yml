@@ -104,6 +104,8 @@ jobs:
         run: node --test .github/scripts/test-auto-merge-eligibility.test.ts
       - name: Run Dependabot auto-merge preflight unit tests
         run: node --test .github/scripts/test-dependabot-auto-merge-preflight.test.ts
+      - name: Run repository auto-merge safety preflight unit tests
+        run: node --test .github/scripts/test-auto-merge-repository-preflight.test.ts
       - name: Run reusable workflow trigger unit workflow contract tests
         run: node --test .github/scripts/test-assert-reusable-workflow-triggers-unit-workflow.test.ts
       - name: Run release-please version gate unit tests

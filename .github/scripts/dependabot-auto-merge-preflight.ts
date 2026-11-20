@@ -76,6 +76,49 @@ export function dependabotCommitsTrustworthy(
 const UPDATE_TYPE_PREFIX = "version-update:semver-";
 const DEPENDENCY_GROUP_PREFIX = "dependency-group:";
 
+export type DependabotSemverLevel = "patch" | "minor" | "major";
+
+export function semverLevelsInMessage(message: string): Set<DependabotSemverLevel> {
+  const levels = new Set<DependabotSemverLevel>();
+  for (const line of message.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(UPDATE_TYPE_PREFIX)) {
+      continue;
+    }
+    const level = trimmed.slice(UPDATE_TYPE_PREFIX.length).trim().toLowerCase();
+    if (level === "patch" || level === "minor" || level === "major") {
+      levels.add(level);
+    }
+  }
+  return levels;
+}
+
+export function semverLevelsInPullRequest(
+  commits: PullRequestCommitLike[],
+): Set<DependabotSemverLevel> {
+  const levels = new Set<DependabotSemverLevel>();
+  for (const commit of commits) {
+    const message = commit.commit?.message ?? "";
+    for (const level of semverLevelsInMessage(message)) {
+      levels.add(level);
+    }
+  }
+  return levels;
+}
+
+function dominantUpdateType(levels: Set<DependabotSemverLevel>): string {
+  if (levels.has("major")) {
+    return "version-update:semver-major";
+  }
+  if (levels.has("minor")) {
+    return "version-update:semver-minor";
+  }
+  if (levels.has("patch")) {
+    return "version-update:semver-patch";
+  }
+  return "";
+}
+
 function dependabotMetadataFromLine(line: string): {
   updateType: string;
   dependencyGroup: string;
@@ -131,12 +174,27 @@ export function assessDependabotPullRequest(
       dependencyGroup: "",
     };
   }
+  const levels = semverLevelsInPullRequest(commits);
+  if (levels.has("major")) {
+    return {
+      proceed: true,
+      reason: "",
+      updateType: "version-update:semver-major",
+      dependencyGroup: parseDependabotCommitMetadata(
+        commits.at(-1)?.commit?.message ?? "",
+      ).dependencyGroup,
+    };
+  }
+
   const newest = commits.at(-1)?.commit?.message ?? "";
   const metadata = parseDependabotCommitMetadata(newest);
+  const updateType =
+    metadata.updateType.length > 0 ? metadata.updateType : dominantUpdateType(levels);
   return {
     proceed: true,
     reason: "",
-    ...metadata,
+    updateType,
+    dependencyGroup: metadata.dependencyGroup,
   };
 }
 

@@ -510,11 +510,21 @@ When a reusables pin bumps the block version, update the marked region (and mark
 
 Approves and enables **auto-merge** (`gh pr merge --auto` only — merges complete after required checks are green) for low-risk pull requests via the **osloer-reviewer** GitHub App. The reusable workflow does **not** check out pull request code and does **not** use `pull_request_target`.
 
+**Repository safety preflight (required):** before any approval or `gh pr merge --auto`, the workflow verifies that the repository default branch **requires the `ci-passed` status check** (ruleset or branch protection, read with `GITHUB_TOKEN`). If `ci-passed` is not required, the job logs a clear notice and **exits successfully without enabling auto-merge**, because GitHub could merge immediately once auto-merge is turned on.
+
+**Re-evaluate on every synchronize:** eligibility runs on `opened`, `synchronize`, `reopened`, and `ready_for_review`. When a pull request stops being eligible (for example a human push onto a Dependabot branch), the workflow calls `gh pr merge --disable-auto` so a previously enabled auto-merge is cleared.
+
 **Eligibility (skipped cleanly when not met):**
 
-- **Dependabot** (`github.event.pull_request.user.login == 'dependabot[bot]'`): `dependabot/fetch-metadata` update type `version-update:semver-patch` or `version-update:semver-minor` only — **majors never auto-merge** (wait for a human). Patch/minor updates in the Dependabot group `osloer-reusables` follow the same rule.
+- **Dependabot** (`github.event.pull_request.user.login == 'dependabot[bot]'`): only `version-update:semver-patch` or `version-update:semver-minor` — **majors never auto-merge**. **Grouped updates** scan every commit message on the branch; if **any** dependency in the group is a major semver bump, auto-merge is refused. **Mixed-author branches** (non-Dependabot commits on the Dependabot branch) skip metadata fetch and auto-merge. **Cooldown** is enforced in each repo’s `dependabot.yml` (`minimum release age`); the org typescript-node-template defaults are major **30** days, minor **7** days, patch **3** days (and default group **7** days). The reusable workflow does not duplicate that policy because release age is not available reliably from the GitHub API without extra secrets.
 - **Release Please** (`osloer-reviewer[bot]`, head ref `release-please--*`, file allowlist): only `CHANGELOG.md`, `**/CHANGELOG.md`, `.release-please-manifest.json`, `package.json`, `package-lock.json`, and `version.txt`; `package.json` / `package-lock.json` diffs must touch the `version` field only (verified via the pull request files API).
-- **Release Please semver gate:** reads the `.release-please-manifest.json` diff per component (patch/minor only). Skips auto-merge when the major version increases, when the PR body or CHANGELOG diff contains `BREAKING CHANGE` or `⚠ BREAKING CHANGES` (including pre-1.0 releases where breaking changes bump minor), or when the manifest cannot be parsed (fail closed). Those PRs stay open and Release Please keeps updating them; the workflow applies label **`release:major-hold`** once (or posts a comment if labeling fails) so maintainers merge majors manually. Patch/minor releases without breaking markers still auto-merge.
+- **Release Please semver gate:** patch and minor bumps on **1.0.0 and later** auto-merge when there are no breaking markers. **Pre-1.0 minors always need a human** (only pre-1.0 **patch** releases auto-merge). Skips auto-merge when the major version increases, when the PR body or CHANGELOG diff contains `BREAKING CHANGE` or `⚠ BREAKING CHANGES`, or when the manifest cannot be parsed (fail closed). Major or breaking releases get label **`release:major-hold`** once (or a comment if labeling fails).
+
+**Repository settings (fleet standard):**
+
+1. **Settings → General → Pull Requests:** enable **Allow auto-merge** and **Allow squash merging**; disable merge commits and rebase merging unless the repo has a documented exception (consumers should use **`merge-method: squash`**).
+2. **Rulesets / branch protection:** require the **`ci-passed`** check on the default branch (only that aggregate check).
+3. **Variables / secrets:** `vars.OSLOER_RELEASE_APP_ID` and secret `RELEASE_APP_PRIVATE_KEY` (PEM). Add the same secret as a **Dependabot secret** so workflows on `dependabot/*` can mint the installation token.
 
 Configure `vars` with the app ID (for example `OSLOER_RELEASE_APP_ID`) and repository secret `RELEASE_APP_PRIVATE_KEY` (PEM). For Dependabot branches, add the same secret as a **Dependabot secret** so workflows on `dependabot/*` can mint the installation token.
 

@@ -30,7 +30,7 @@ export function isReleaseBotAuthor(authorLogin: string): boolean {
 
 export function dependabotUpdateEligible(
   updateType: string,
-  _dependencyGroup: string,
+  dependencyGroup: string,
 ): boolean {
   const normalizedType = updateType.trim();
   if (normalizedType === "version-update:semver-major") {
@@ -38,6 +38,9 @@ export function dependabotUpdateEligible(
   }
   if (ELIGIBLE_DEPENDABOT_UPDATE_TYPES.has(normalizedType)) {
     return true;
+  }
+  if (dependencyGroup.trim().length > 0) {
+    return false;
   }
   return false;
 }
