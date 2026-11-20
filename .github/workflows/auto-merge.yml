@@ -46,14 +46,6 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - name: Dependabot metadata
-        if: >-
-          inputs.allow-dependabot != false &&
-          github.event.pull_request.user.login == 'dependabot[bot]'
-        id: dependabot
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: osloer-industries/.github
@@ -62,9 +54,29 @@ jobs:
           sparse-checkout: |
             .github/scripts/auto-merge.ts
             .github/scripts/auto-merge-eligibility.ts
+            .github/scripts/dependabot-auto-merge-preflight.ts
             .github/scripts/release-please-version-gate.ts
           sparse-checkout-cone-mode: true
           persist-credentials: false
+      - name: Dependabot pull request preflight
+        if: >-
+          inputs.allow-dependabot != false &&
+          github.event.pull_request.user.login == 'dependabot[bot]'
+        id: dependabot-preflight
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: node reusables/.github/scripts/dependabot-auto-merge-preflight.ts
+      - name: Dependabot metadata
+        if: >-
+          inputs.allow-dependabot != false &&
+          github.event.pull_request.user.login == 'dependabot[bot]' &&
+          steps.dependabot-preflight.outputs.proceed == 'true'
+        id: dependabot
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -79,8 +91,8 @@ jobs:
           MERGE_METHOD: ${{ inputs.merge-method || 'merge' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
-          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type }}
-          DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group }}
+          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}
+          DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group || steps.dependabot-preflight.outputs.dependency-group }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node reusables/.github/scripts/auto-merge.ts
       - name: Mint osloer-reviewer installation token
@@ -106,7 +118,7 @@ jobs:
           MERGE_METHOD: ${{ inputs.merge-method || 'merge' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
-          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type }}
-          DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group }}
+          DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}
+          DEPENDABOT_DEPENDENCY_GROUP: ${{ steps.dependabot.outputs.dependency-group || steps.dependabot-preflight.outputs.dependency-group }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node reusables/.github/scripts/auto-merge.ts
