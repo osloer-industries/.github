@@ -1,0 +1,20 @@
+name: Pull request title
+
+# pull_request (not pull_request_target): zizmor rejects pull_request_target as insecure;
+# pull_request is sufficient because the org semantic reusable only needs pull-requests: read.
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semantic-title:
+    permissions:
+      pull-requests: read
+    uses: osloer-industries/.github/.github/workflows/semantic-pull-request.yml@a6ee91211fd9ba096ec141bacdb67985a82b6767 # v0.1.7

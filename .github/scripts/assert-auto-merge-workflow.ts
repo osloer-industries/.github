@@ -199,6 +199,17 @@ if (!reusable.includes("job.workflow_sha || github.sha")) {
   fail(REUSABLE, "script checkout must use job.workflow_sha with github.sha fallback");
 }
 
+if (reusable.includes("inputs.merge-method || 'merge'")) {
+  fail(
+    REUSABLE,
+    "MERGE_METHOD fallback must be squash to match merge-method input default",
+  );
+}
+
+if (!reusable.includes("inputs.merge-method || 'squash'")) {
+  fail(REUSABLE, "MERGE_METHOD must fall back to squash when merge-method input is empty");
+}
+
 if (failed) {
   process.exit(1);
 }

@@ -38,6 +38,8 @@ jobs:
         run: node --experimental-strip-types .github/scripts/assert-reusable-workflow-triggers.ts
       - name: Assert auto-merge reusable workflow contracts
         run: node --experimental-strip-types .github/scripts/assert-auto-merge-workflow.ts
+      - name: Assert PR title caller workflow contracts
+        run: node --experimental-strip-types .github/scripts/assert-pr-title-workflow.ts
       - name: Assert ci-passed aggregate gate contracts
         run: node --experimental-strip-types .github/scripts/assert-ci-passed-workflow.ts
       - name: Assert Release Please app tokens request required permissions
@@ -121,6 +123,8 @@ jobs:
         run: node --test .github/scripts/test-release-please-version-gate.test.ts
       - name: Run auto-merge workflow contract tests
         run: node --test .github/scripts/test-assert-auto-merge-workflow.test.ts
+      - name: Run PR title workflow contract tests
+        run: node --test .github/scripts/test-assert-pr-title-workflow.test.ts
       - name: Run ci-passed gate unit tests
         run: node --test .github/scripts/test-ci-passed-gate.test.ts
       - name: Run ci-passed workflow contract tests
