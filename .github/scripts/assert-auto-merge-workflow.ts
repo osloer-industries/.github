@@ -1,12 +1,11 @@
 /**
- * Contract checks for auto-merge reusable workflow and caller (pinned actions, no
- * pull_request_target, no PR checkout, auto-merge only via gh --auto).
+ * Contract checks for auto-merge reusable workflow wiring that workflow-security
+ * (actionlint + zizmor) does not enforce: sparse-checkout scripts, preflights,
+ * gh --auto/--disable-auto only via auto-merge.ts, and org merge gates.
  */
 import { readFileSync } from "node:fs";
 
 const REUSABLE = ".github/workflows/auto-merge.yml";
-
-const FULL_SHA_RE = /@[0-9a-f]{40}\s+#\s+v[\d.]+\s*$/;
 
 function load(path: string): string {
   try {
@@ -15,42 +14,6 @@ function load(path: string): string {
     console.error(`::error::Could not read ${path}`);
     process.exit(1);
   }
-}
-
-function linesWithUses(yaml: string): { line: number; text: string }[] {
-  const out: { line: number; text: string }[] = [];
-  const lines = yaml.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (line.includes("uses:")) {
-      out.push({ line: i + 1, text: line.trim() });
-    }
-  }
-  return out;
-}
-
-function usesLineHasFullShaPin(text: string): boolean {
-  return FULL_SHA_RE.exec(text) !== null;
-}
-
-function usesLineHas40CharSha(text: string): boolean {
-  const at = text.indexOf("@");
-  if (at < 0) {
-    return false;
-  }
-  const sha = text.slice(at + 1, at + 41);
-  if (sha.length !== 40) {
-    return false;
-  }
-  for (const ch of sha) {
-    const code = ch.charCodeAt(0);
-    const isDigit = code >= 48 && code <= 57;
-    const isLowerHex = code >= 97 && code <= 102;
-    if (!isDigit && !isLowerHex) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function scriptCallsGhPrMergeAuto(script: string): boolean {
@@ -95,10 +58,6 @@ function reusableChecksOutCallerPrCode(yaml: string): boolean {
   return !checkoutPinsOrgReusables && refsPullRequest;
 }
 
-function hasReadOnlyJobPermissions(yaml: string): boolean {
-  return yaml.includes("contents: read") && yaml.includes("pull-requests: read");
-}
-
 let failed = false;
 
 function fail(path: string, message: string): void {
@@ -107,10 +66,6 @@ function fail(path: string, message: string): void {
 }
 
 const reusable = load(REUSABLE);
-
-if (reusable.includes("pull_request_target:")) {
-  fail(REUSABLE, "must not use pull_request_target");
-}
 
 if (!reusable.includes("types: [opened, synchronize, reopened, ready_for_review]")) {
   fail(
@@ -152,18 +107,6 @@ if (!reusable.includes("steps.dependabot-preflight.outputs.proceed == 'true'")) 
   fail(REUSABLE, "dependabot/fetch-metadata must run only when preflight proceed is true");
 }
 
-for (const { line, text } of linesWithUses(reusable)) {
-  if (text.includes("uses: ./")) {
-    continue;
-  }
-  if (!usesLineHas40CharSha(text)) {
-    fail(REUSABLE, `line ${line} uses: must pin a full commit SHA: ${text}`);
-  }
-  if (!usesLineHasFullShaPin(text) && text.includes("@")) {
-    fail(REUSABLE, `line ${line} uses: must include # vX.Y.Z comment: ${text}`);
-  }
-}
-
 const requiredPins: { needle: string; label: string }[] = [
   {
     needle: "dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98",
@@ -198,16 +141,8 @@ if (!reusable.includes("Sync auto-merge state")) {
   fail(REUSABLE, "final step must sync auto-merge (enable or disable)");
 }
 
-if (reusable.includes("persist-credentials: true")) {
-  fail(REUSABLE, "checkout must not set persist-credentials: true");
-}
-
 if (reusableChecksOutCallerPrCode(reusable)) {
   fail(REUSABLE, "must not checkout pull request code from the caller repository");
-}
-
-if (!hasReadOnlyJobPermissions(reusable)) {
-  fail(REUSABLE, "job permissions must be contents: read and pull-requests: read only");
 }
 
 if (!reusable.includes("permission-pull-requests: write")) {
@@ -233,6 +168,17 @@ if (!gateScript.includes("RELEASE_MAJOR_HOLD_LABEL")) {
 
 if (!reusable.includes("job.workflow_sha || github.sha")) {
   fail(REUSABLE, "script checkout must use job.workflow_sha with github.sha fallback");
+}
+
+if (reusable.includes("inputs.merge-method || 'merge'")) {
+  fail(
+    REUSABLE,
+    "MERGE_METHOD fallback must be squash to match merge-method input default",
+  );
+}
+
+if (!reusable.includes("inputs.merge-method || 'squash'")) {
+  fail(REUSABLE, "MERGE_METHOD must fall back to squash when merge-method input is empty");
 }
 
 if (failed) {

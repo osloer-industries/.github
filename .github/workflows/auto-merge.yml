@@ -98,7 +98,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_METHOD: ${{ inputs.merge-method || (github.repository == 'osloer-industries/.github' && 'merge') || 'squash' }}
+          MERGE_METHOD: ${{ inputs.merge-method || 'squash' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
           DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}
@@ -135,7 +135,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          MERGE_METHOD: ${{ inputs.merge-method || (github.repository == 'osloer-industries/.github' && 'merge') || 'squash' }}
+          MERGE_METHOD: ${{ inputs.merge-method || 'squash' }}
           ALLOW_DEPENDABOT: ${{ inputs.allow-dependabot != false }}
           ALLOW_RELEASE_PRS: ${{ inputs.allow-release-prs != false }}
           DEPENDABOT_UPDATE_TYPE: ${{ steps.dependabot.outputs.update-type || steps.dependabot-preflight.outputs.update-type }}

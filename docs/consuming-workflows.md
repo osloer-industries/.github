@@ -146,6 +146,8 @@ This repository's [`ci.yml`](.github/workflows/ci.yml) exercise **npm and bun** 
 
 ### Semantic pull request title
 
+This repository runs the same thin caller as consumers via [`.github/workflows/pr-title.yml`](../.github/workflows/pr-title.yml) (org pin at the latest release tag; bump the SHA when cutting a new reusables release).
+
 ```yaml
 name: Pull request title
 
@@ -556,7 +558,7 @@ jobs:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
-`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s [`.github/workflows/auto-merge.yml`](.github/workflows/auto-merge.yml) direct `pull_request` trigger uses merge method `merge` (via input fallback) because release tags are created from merge commits here.
+`merge-method` is `squash` (default), `merge`, or `rebase`. This repository’s [`.github/workflows/auto-merge.yml`](.github/workflows/auto-merge.yml) direct `pull_request` trigger inherits the same `squash` default via the `MERGE_METHOD` expression fallback when callers omit `merge-method`.
 
 Rely on org rulesets / branch protection **required status checks** so auto-merge does not complete until every gate is green. In practice register only **`ci-passed`** as required (see below); auto-merge then waits for that single aggregate check.
 
