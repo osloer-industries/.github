@@ -37,7 +37,13 @@ on:
       use-composite-action:
         description: When true, run the org composite action instead of sparse-checkout (saves runner time)
         type: boolean
-        default: true
+        default: false
+      reusables-ref:
+        description: >
+          Full commit SHA for ci-passed-gate composite when use-composite-action is true (must match the
+          caller's osloer-industries/.github pin; job.workflow_sha is not valid in uses: on composite actions).
+        type: string
+        default: ""
 
 jobs:
   ci-passed:
@@ -49,7 +55,7 @@ jobs:
     steps:
       - name: Require every upstream job to succeed (composite)
         if: inputs.use-composite-action
-        uses: osloer-industries/.github/.github/actions/ci-passed-gate@${{ job.workflow_sha }}
+        uses: osloer-industries/.github/.github/actions/ci-passed-gate@${{ inputs.reusables-ref }}
         with:
           needs-json: ${{ inputs.needs-json }}
           github-event-name: ${{ github.event_name }}

@@ -98,7 +98,7 @@ export function parseNeedsJson(raw: string): NeedsMap {
 
 export function isDocsOnlyCiScope(needs: NeedsMap, ciPathsScopeJobId: string): boolean {
   const entry = needs[ciPathsScopeJobId];
-  if (entry === undefined || entry.result !== "success") {
+  if (entry?.result !== "success") {
     return false;
   }
   return entry.outputs?.["run-full-ci"] === "false";
@@ -151,21 +151,25 @@ function skippedAllowedForDocsOnlyExemptions(
   return true;
 }
 
-function skippedResultAllowed(
-  jobId: string,
-  needs: NeedsMap,
-  eventName: string | undefined,
-  sonarZeroIssuesJobId: string,
-  codeqlJobId: string,
-  workflowSecurityJobId: string,
-  ciPathsScopeJobId: string,
-  ciPassedJobId: string,
-): boolean {
+interface SkippedResultContext {
+  jobId: string;
+  needs: NeedsMap;
+  eventName: string | undefined;
+  jobIds: CiPassedGateJobIds;
+}
+
+function skippedResultAllowed(context: SkippedResultContext): boolean {
+  const { jobId, needs, eventName, jobIds } = context;
   return (
-    skippedAllowedForSonarJob(jobId, eventName, sonarZeroIssuesJobId) ||
-    skippedAllowedForCodeqlJob(jobId, eventName, codeqlJobId) ||
-    skippedAllowedForWorkflowSecurityJob(jobId, workflowSecurityJobId) ||
-    skippedAllowedForDocsOnlyExemptions(jobId, needs, ciPathsScopeJobId, ciPassedJobId)
+    skippedAllowedForSonarJob(jobId, eventName, jobIds.sonarZeroIssuesJobId) ||
+    skippedAllowedForCodeqlJob(jobId, eventName, jobIds.codeqlJobId) ||
+    skippedAllowedForWorkflowSecurityJob(jobId, jobIds.workflowSecurityJobId) ||
+    skippedAllowedForDocsOnlyExemptions(
+      jobId,
+      needs,
+      jobIds.ciPathsScopeJobId,
+      jobIds.ciPassedJobId,
+    )
   );
 }
 
@@ -237,16 +241,7 @@ export function findNeedsFailures(
     }
     if (
       result === "skipped" &&
-      skippedResultAllowed(
-        jobId,
-        needs,
-        eventName,
-        resolved.sonarZeroIssuesJobId,
-        resolved.codeqlJobId,
-        resolved.workflowSecurityJobId,
-        resolved.ciPathsScopeJobId,
-        resolved.ciPassedJobId,
-      )
+      skippedResultAllowed({ jobId, needs, eventName, jobIds: resolved })
     ) {
       continue;
     }
