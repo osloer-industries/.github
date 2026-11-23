@@ -571,7 +571,7 @@ Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and a
 
 **Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required.
 
-**Paths scope:** call `ci-paths-scope.yml` first; gate other jobs with `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. Run workflow-security only when `workflows-changed == 'true'` (still under full CI).
+**Paths scope:** call `ci-paths-scope.yml` first; gate other jobs with `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. Run workflow-security only when `workflows-changed == 'true'` (still under full CI). Skip CI Sonar jobs on pull requests when `product-code-changed == 'false'` (workflow pins only); `ci-passed-gate` allows that skip.
 
 **PR title caller:** `types: [opened, reopened, edited]` only (not `synchronize`); define `concurrency` on the caller workflow.
 

@@ -10,6 +10,7 @@ export const ALLOWED_NEEDS_RESULTS = new Set(["success"]);
 
 /** Default caller `needs` job id for SonarCloud zero-open-issues (override via SONAR_ZERO_ISSUES_JOB). */
 export const DEFAULT_SONAR_ZERO_ISSUES_JOB_ID = "sonar-zero-open-issues";
+export const DEFAULT_SONAR_ANALYZE_JOB_ID = "sonar-analyze";
 export const DEFAULT_CODEQL_JOB_ID = "codeql";
 export const DEFAULT_WORKFLOW_SECURITY_JOB_ID = "workflow-security";
 export const DEFAULT_CI_PATHS_SCOPE_JOB_ID = "ci-paths-scope";
@@ -104,6 +105,17 @@ export function isDocsOnlyCiScope(needs: NeedsMap, ciPathsScopeJobId: string): b
   return entry.outputs?.["run-full-ci"] === "false";
 }
 
+export function isWorkflowOnlyCiScope(needs: NeedsMap, ciPathsScopeJobId: string): boolean {
+  const entry = needs[ciPathsScopeJobId];
+  if (entry?.result !== "success") {
+    return false;
+  }
+  return (
+    entry.outputs?.["workflows-changed"] === "true" &&
+    entry.outputs?.["product-code-changed"] === "false"
+  );
+}
+
 function skippedAllowedForSonarJob(
   jobId: string,
   eventName: string | undefined,
@@ -136,6 +148,22 @@ function skippedAllowedForWorkflowSecurityJob(
   return jobId === workflowSecurityJobId;
 }
 
+function skippedAllowedForWorkflowOnlySonarJobs(
+  jobId: string,
+  eventName: string | undefined,
+  needs: NeedsMap,
+  ciPathsScopeJobId: string,
+  sonarZeroIssuesJobId: string,
+): boolean {
+  if (eventName !== "pull_request") {
+    return false;
+  }
+  if (!isWorkflowOnlyCiScope(needs, ciPathsScopeJobId)) {
+    return false;
+  }
+  return jobId === sonarZeroIssuesJobId || jobId === DEFAULT_SONAR_ANALYZE_JOB_ID;
+}
+
 function skippedAllowedForDocsOnlyExemptions(
   jobId: string,
   needs: NeedsMap,
@@ -164,6 +192,13 @@ function skippedResultAllowed(context: SkippedResultContext): boolean {
     skippedAllowedForSonarJob(jobId, eventName, jobIds.sonarZeroIssuesJobId) ||
     skippedAllowedForCodeqlJob(jobId, eventName, jobIds.codeqlJobId) ||
     skippedAllowedForWorkflowSecurityJob(jobId, jobIds.workflowSecurityJobId) ||
+    skippedAllowedForWorkflowOnlySonarJobs(
+      jobId,
+      eventName,
+      needs,
+      jobIds.ciPathsScopeJobId,
+      jobIds.sonarZeroIssuesJobId,
+    ) ||
     skippedAllowedForDocsOnlyExemptions(
       jobId,
       needs,

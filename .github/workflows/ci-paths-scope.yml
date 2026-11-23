@@ -18,6 +18,9 @@ on:
       workflows-changed:
         description: Whether workflow or action pins changed
         value: ${{ jobs.ci-paths-scope.outputs.workflows-changed }}
+      product-code-changed:
+        description: Whether non-markdown, non-.github paths changed (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.product-code-changed }}
 
 jobs:
   ci-paths-scope:
@@ -30,6 +33,7 @@ jobs:
     outputs:
       run-full-ci: ${{ steps.filter.outputs.full-ci }}
       workflows-changed: ${{ steps.filter.outputs.workflows }}
+      product-code-changed: ${{ steps.filter.outputs.product-code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,3 +54,10 @@ jobs:
               - '.github/workflows/**'
               - '.github/dependabot.yml'
               - '.github/actions/**'
+            product-code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!AGENTS.md'
+              - '!.agents/**'
+              - '!.github/**'

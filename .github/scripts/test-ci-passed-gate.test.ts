@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   findNeedsFailures,
   isDocsOnlyCiScope,
+  isWorkflowOnlyCiScope,
   parseNeedsJson,
   parseSonarZeroIssuesJobId,
   runCiPassedGate,
@@ -68,6 +69,24 @@ test("docs-only scope still requires ci-paths-scope success", () => {
     "ci-paths-scope: failure",
     "quality: skipped",
   ]);
+});
+
+test("allows Sonar jobs skipped on workflow-only pull requests", () => {
+  const needs = {
+    "ci-paths-scope": {
+      result: "success",
+      outputs: {
+        "run-full-ci": "true",
+        "workflows-changed": "true",
+        "product-code-changed": "false",
+      },
+    },
+    "sonar-analyze": { result: "skipped" },
+    "sonar-zero-open-issues": { result: "skipped" },
+    quality: { result: "success" },
+  };
+  assert.equal(isWorkflowOnlyCiScope(needs, "ci-paths-scope"), true);
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), []);
 });
 
 test("rejects sonar-zero-open-issues skipped, cancelled, or missing on pull_request", () => {
