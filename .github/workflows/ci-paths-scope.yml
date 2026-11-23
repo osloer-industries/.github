@@ -33,7 +33,7 @@ jobs:
     outputs:
       run-full-ci: ${{ steps.filter.outputs.full-ci }}
       workflows-changed: ${{ steps.filter.outputs.workflows }}
-      product-code-changed: ${{ steps.filter.outputs.product-code }}
+      product-code-changed: ${{ steps.product-code.outputs.product-code-changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,10 +54,34 @@ jobs:
               - '.github/workflows/**'
               - '.github/dependabot.yml'
               - '.github/actions/**'
-            product-code:
-              - '**'
-              - '!**/*.md'
-              - '!docs/**'
-              - '!AGENTS.md'
-              - '!.agents/**'
-              - '!.github/**'
+      - name: Detect product code changes
+        id: product-code
+        env:
+          RUN_FULL_CI: ${{ steps.filter.outputs.full-ci }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN_FULL_CI" != "true" ]; then
+            echo "product-code-changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$base" ]; then
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "product-code-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -t changed < <(git diff --name-only "$base...HEAD")
+          product="false"
+          for path in "${changed[@]}"; do
+            case "$path" in
+              *.md|docs/*|AGENTS.md|.agents/*|.github/*)
+                ;;
+              *)
+                product="true"
+                break
+                ;;
+            esac
+          done
+          echo "product-code-changed=$product" >> "$GITHUB_OUTPUT"
