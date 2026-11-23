@@ -27,17 +27,8 @@ const reusable = load(REUSABLE);
 const ci = load(CI_WORKFLOW);
 const script = load(GATE_SCRIPT);
 
-const hasSparseCheckoutGate = reusable.includes("job.workflow_sha");
-const hasCompositeGate =
-  reusable.includes("reusables-ref") &&
-  reusable.includes(
-    "osloer-industries/.github/.github/actions/ci-passed-gate@${{ inputs.reusables-ref }}",
-  );
-if (!hasSparseCheckoutGate && !hasCompositeGate) {
-  fail(
-    REUSABLE,
-    "must checkout gate script at job.workflow_sha or use ci-passed-gate composite with reusables-ref input",
-  );
+if (!reusable.includes("job.workflow_sha")) {
+  fail(REUSABLE, "must checkout gate script at job.workflow_sha");
 }
 
 if (!reusable.includes("needs-json")) {

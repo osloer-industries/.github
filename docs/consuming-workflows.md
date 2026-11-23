@@ -411,7 +411,7 @@ jobs:
 
 Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate waits until the head commit appears on `api/project_pull_requests/list` **and** a pull-request REPORT compute-engine task reaches **SUCCESS** (via `api/ce/activity` / `api/ce/task`).
 
-Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). When **`use-composite-action: true`**, pass **`reusables-ref`** with the same SHA as your org pin (`job.workflow_sha` is not valid in composite `uses:` per actionlint).
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). Callers that want the composite action without a nested reusable should call **`.github/actions/ci-passed-gate@<pin-sha>`** from an inline job (static SHA in `uses:`); the reusable workflow does not support dynamic composite `uses:` refs (actionlint).
 
 Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 

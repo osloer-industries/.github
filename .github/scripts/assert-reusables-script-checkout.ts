@@ -22,13 +22,11 @@ function load(path: string): string {
   }
 }
 
-const CI_PASSED_WORKFLOW = ".github/workflows/ci-passed.yml";
-
 for (const workflowPath of WORKFLOWS) {
   const yaml = load(workflowPath);
   const violations: string[] = [];
 
-  if (yaml.includes("reusables-ref") && workflowPath !== CI_PASSED_WORKFLOW) {
+  if (yaml.includes("reusables-ref")) {
     violations.push("must not define or reference reusables-ref");
   }
   if (yaml.includes("github.workflow_sha")) {
