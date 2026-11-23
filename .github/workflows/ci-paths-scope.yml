@@ -36,7 +36,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Detect changed paths
-        uses: dorny/paths-filter@de90cc61fb54bd49f0f4a0a51f240eff657e5dcc # v3.0.2
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
         with:
           filters: |

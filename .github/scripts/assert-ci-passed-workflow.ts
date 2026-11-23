@@ -29,9 +29,12 @@ const script = load(GATE_SCRIPT);
 
 if (
   !reusable.includes("job.workflow_sha") &&
-  !reusable.includes("./.github/actions/ci-passed-gate")
+  !reusable.includes("osloer-industries/.github/.github/actions/ci-passed-gate@${{ job.workflow_sha }}")
 ) {
-  fail(REUSABLE, "must checkout gate script at job.workflow_sha or use ci-passed-gate composite");
+  fail(
+    REUSABLE,
+    "must checkout gate script at job.workflow_sha or use ci-passed-gate composite at job.workflow_sha",
+  );
 }
 
 if (!reusable.includes("needs-json")) {

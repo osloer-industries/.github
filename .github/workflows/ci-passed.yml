@@ -49,7 +49,7 @@ jobs:
     steps:
       - name: Require every upstream job to succeed (composite)
         if: inputs.use-composite-action
-        uses: ./.github/actions/ci-passed-gate
+        uses: osloer-industries/.github/.github/actions/ci-passed-gate@${{ job.workflow_sha }}
         with:
           needs-json: ${{ inputs.needs-json }}
           github-event-name: ${{ github.event_name }}
