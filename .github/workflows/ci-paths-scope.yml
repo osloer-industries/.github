@@ -1,0 +1,52 @@
+name: Reusable — CI paths scope
+
+on:
+  workflow_call:
+    inputs:
+      job-name:
+        description: Display name for the scope job check
+        type: string
+        default: CI paths scope
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 5
+    outputs:
+      run-full-ci:
+        description: Whether non-documentation paths changed (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.run-full-ci }}
+      workflows-changed:
+        description: Whether workflow or action pins changed
+        value: ${{ jobs.ci-paths-scope.outputs.workflows-changed }}
+
+jobs:
+  ci-paths-scope:
+    name: ${{ inputs.job-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run-full-ci: ${{ steps.filter.outputs.full-ci }}
+      workflows-changed: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Detect changed paths
+        uses: dorny/paths-filter@de90cc61fb54bd49f0f4a0a51f240eff657e5dcc # v3.0.2
+        id: filter
+        with:
+          filters: |
+            full-ci:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!AGENTS.md'
+              - '!.agents/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/dependabot.yml'
+              - '.github/actions/**'

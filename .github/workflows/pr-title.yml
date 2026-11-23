@@ -4,7 +4,7 @@ name: Pull request title
 # pull_request is sufficient because the org semantic reusable only needs pull-requests: read.
 on:
   pull_request:
-    types: [opened, reopened, edited, synchronize]
+    types: [opened, reopened, edited]
 
 permissions:
   contents: read

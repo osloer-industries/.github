@@ -22,6 +22,22 @@ on:
           non-pull_request events; a single job id only (no lists).
         type: string
         default: sonar-zero-open-issues
+      codeql-job:
+        description: Caller needs job id for CodeQL (skipped on pull_request when off-PR scanning)
+        type: string
+        default: codeql
+      workflow-security-job:
+        description: Caller needs job id for workflow security (may be skipped when workflows unchanged)
+        type: string
+        default: workflow-security
+      ci-paths-scope-job:
+        description: Caller needs job id for CI paths scope (docs-only skip contract)
+        type: string
+        default: ci-paths-scope
+      use-composite-action:
+        description: When true, run the org composite action instead of sparse-checkout (saves runner time)
+        type: boolean
+        default: true
 
 jobs:
   ci-passed:
@@ -31,7 +47,18 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Require every upstream job to succeed (composite)
+        if: inputs.use-composite-action
+        uses: ./.github/actions/ci-passed-gate
+        with:
+          needs-json: ${{ inputs.needs-json }}
+          github-event-name: ${{ github.event_name }}
+          sonar-zero-issues-job: ${{ inputs.sonar-zero-issues-job }}
+          codeql-job: ${{ inputs.codeql-job }}
+          workflow-security-job: ${{ inputs.workflow-security-job }}
+          ci-paths-scope-job: ${{ inputs.ci-paths-scope-job }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !inputs.use-composite-action }}
         with:
           repository: osloer-industries/.github
           ref: ${{ job.workflow_sha }}
@@ -40,11 +67,16 @@ jobs:
           sparse-checkout-cone-mode: true
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ !inputs.use-composite-action }}
         with:
           node-version: "24"
-      - name: Require every upstream job to succeed
+      - name: Require every upstream job to succeed (sparse checkout)
+        if: ${{ !inputs.use-composite-action }}
         env:
           NEEDS_JSON: ${{ inputs.needs-json }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           SONAR_ZERO_ISSUES_JOB: ${{ inputs.sonar-zero-issues-job }}
+          CODEQL_JOB: ${{ inputs.codeql-job }}
+          WORKFLOW_SECURITY_JOB: ${{ inputs.workflow-security-job }}
+          CI_PATHS_SCOPE_JOB: ${{ inputs.ci-paths-scope-job }}
         run: node reusables/.github/scripts/ci-passed-gate.ts

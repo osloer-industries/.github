@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   findNeedsFailures,
+  isDocsOnlyCiScope,
   parseNeedsJson,
   parseSonarZeroIssuesJobId,
   runCiPassedGate,
@@ -24,6 +25,49 @@ test("allows sonar-zero-open-issues skipped on push", () => {
   };
   assert.deepEqual(findNeedsFailures(needs, "push"), []);
   assert.deepEqual(findNeedsFailures(needs, "schedule"), []);
+});
+
+test("allows codeql skipped on pull_request", () => {
+  const needs = {
+    codeql: { result: "skipped" },
+    quality: { result: "success" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), []);
+  assert.deepEqual(findNeedsFailures(needs, "push"), ["codeql: skipped"]);
+});
+
+test("allows workflow-security skipped when workflows unchanged", () => {
+  const needs = {
+    "workflow-security": { result: "skipped" },
+    quality: { result: "success" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), []);
+  assert.deepEqual(findNeedsFailures(needs, "push"), []);
+});
+
+test("allows upstream jobs skipped on docs-only scope", () => {
+  const needs = {
+    "ci-paths-scope": {
+      result: "success",
+      outputs: { "run-full-ci": "false" },
+    },
+    quality: { result: "skipped" },
+    codeql: { result: "skipped" },
+    "workflow-security": { result: "skipped" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), []);
+  assert.equal(isDocsOnlyCiScope(needs, "ci-paths-scope"), true);
+});
+
+test("docs-only scope still requires ci-paths-scope success", () => {
+  const needs = {
+    "ci-paths-scope": { result: "failure" },
+    quality: { result: "skipped" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), [
+    "ci-paths-scope: failure",
+    "quality: skipped",
+  ]);
 });
 
 test("rejects sonar-zero-open-issues skipped, cancelled, or missing on pull_request", () => {
@@ -63,10 +107,7 @@ test("parseSonarZeroIssuesJobId rejects multiple job ids", () => {
     () => parseSonarZeroIssuesJobId("sonar-zero-open-issues,harness-approval"),
     /comma/i,
   );
-  assert.throws(
-    () => parseSonarZeroIssuesJobId("a,b"),
-    /single job id/,
-  );
+  assert.throws(() => parseSonarZeroIssuesJobId("a,b"), /single job id/);
   assert.equal(parseSonarZeroIssuesJobId("custom-sonar-gate"), "custom-sonar-gate");
   assert.equal(parseSonarZeroIssuesJobId(undefined), "sonar-zero-open-issues");
 });
