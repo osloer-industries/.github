@@ -75,13 +75,15 @@ jobs:
           mapfile -t changed < <(git diff --name-only "$base...HEAD")
           product="false"
           for path in "${changed[@]}"; do
-            case "$path" in
-              *.md|docs/*|AGENTS.md|.agents/*|.github/*)
-                ;;
-              *)
-                product="true"
-                break
-                ;;
-            esac
+            if [[ "$path" =~ ^\.github/ ]] \
+              || [[ "$path" == AGENTS.md ]] \
+              || [[ "$path" =~ ^\.agents/ ]] \
+              || [[ "$path" =~ ^docs/ ]] \
+              || [[ "$path" =~ \.md$ ]] \
+              || [[ "$path" == scripts/template-workflows-contract.test.ts ]]; then
+              continue
+            fi
+            product="true"
+            break
           done
           echo "product-code-changed=$product" >> "$GITHUB_OUTPUT"
