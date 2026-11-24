@@ -1,33 +1,35 @@
 #!/usr/bin/env node
 /**
  * Compute ci-paths-scope run-codeql output from changed paths and event context.
+ * Keep path rules aligned with the bash step in ci-paths-scope.yml.
  */
 
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ZERO_BEFORE = "0000000000000000000000000000000000000000";
+const CODEQL_EXTENSION = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u;
 
 export function pathTriggersCodeql(path: string): boolean {
-  if (/^src\//u.test(path)) {
+  if (path.startsWith("src/")) {
     return true;
   }
-  if (/^lib\//u.test(path)) {
+  if (path.startsWith("lib/")) {
     return true;
   }
-  if (/^app\//u.test(path)) {
+  if (path.startsWith("app/")) {
     return true;
   }
-  if (/^api\//u.test(path) || /^_api\//u.test(path)) {
+  if (path.startsWith("api/") || path.startsWith("_api/")) {
     return true;
   }
-  if (/^scripts\//u.test(path)) {
+  if (path.startsWith("scripts/")) {
     return true;
   }
-  if (/^\.github\/workflows\//u.test(path)) {
+  if (path.startsWith(".github/workflows/")) {
     return true;
   }
-  return /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u.test(path);
+  return CODEQL_EXTENSION.test(path);
 }
 
 export function resolveRunCodeql(

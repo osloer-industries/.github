@@ -91,17 +91,6 @@ jobs:
             break
           done
           echo "product-code-changed=$product" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: osloer-industries/.github
-          ref: ${{ job.workflow_sha }}
-          path: reusables-scope
-          sparse-checkout: .github/scripts/ci-paths-run-codeql.ts
-          sparse-checkout-cone-mode: true
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "24"
       - name: Detect CodeQL scope
         id: run-codeql
         env:
@@ -111,5 +100,36 @@ jobs:
           GITHUB_EVENT_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          line="$(node --experimental-strip-types reusables-scope/.github/scripts/ci-paths-run-codeql.ts)"
-          echo "$line" >> "$GITHUB_OUTPUT"
+          if [ "$RUN_FULL_CI" != "true" ]; then
+            echo "run-codeql=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "run-codeql=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${PULL_REQUEST_BASE_SHA:-}"
+          if [ -z "$base" ]; then
+            base="${GITHUB_EVENT_BEFORE:-}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "run-codeql=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          run=false
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            case "$path" in
+              src/*|lib/*|app/*|api/*|_api/*|scripts/*|.github/workflows/*)
+                run=true
+                break
+                ;;
+            esac
+            case "$path" in
+              *.ts|*.tsx|*.mts|*.cts|*.js|*.jsx|*.mjs|*.cjs)
+                run=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "$base"...HEAD)
+          echo "run-codeql=$run" >> "$GITHUB_OUTPUT"
