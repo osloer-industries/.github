@@ -565,13 +565,13 @@ Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and a
 | Job | May be `skipped` when |
 | --- | --- |
 | `sonar-zero-open-issues` | non–`pull_request` events (PR-only caller job) |
-| `codeql` | `pull_request` (scan on `push` / `schedule` / `merge_group` only) |
+| `codeql` | `pull_request` when `run-codeql` is `false` (docs/config-only); always on `push` / `schedule` / `merge_group` when `run-full-ci` |
 | `workflow-security` | job-level `if` skipped the run (no workflow file changes) |
 | Heavy jobs (`quality`, scanners, …) | `ci-paths-scope` output `run-full-ci` is `false` (docs-only PR) |
 
 **Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required.
 
-**Paths scope:** call `ci-paths-scope.yml` first; gate other jobs with `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. Run workflow-security only when `workflows-changed == 'true'` (still under full CI). Skip CI Sonar jobs on pull requests when `product-code-changed == 'false'` (workflow pins only); `ci-passed-gate` allows that skip.
+**Paths scope:** call `ci-paths-scope.yml` first; gate other jobs with `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. Run workflow-security only when `workflows-changed == 'true'` (still under full CI). Gate CodeQL with `run-codeql` on pull requests (source, scripts, `*.{ts,js}`, `.github/workflows/**`); keep CodeQL on `push`, `schedule`, and `merge_group`. Skip CI Sonar jobs on pull requests when `product-code-changed == 'false'` (workflow pins only); `ci-passed-gate` allows that skip.
 
 **PR title caller:** `types: [opened, reopened, edited]` only (not `synchronize`); define `concurrency` on the caller workflow.
 
@@ -616,7 +616,10 @@ jobs:
     needs: ci-paths-scope
     if: |
       needs.ci-paths-scope.outputs.run-full-ci == 'true' &&
-      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'merge_group')
+      (
+        github.event_name != 'pull_request' ||
+        needs.ci-paths-scope.outputs.run-codeql == 'true'
+      )
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA # v0.x.y
     permissions:
       contents: read

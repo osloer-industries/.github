@@ -28,13 +28,39 @@ test("allows sonar-zero-open-issues skipped on push", () => {
   assert.deepEqual(findNeedsFailures(needs, "schedule"), []);
 });
 
-test("allows codeql skipped on pull_request", () => {
+test("allows codeql skipped on pull_request when run-codeql is false", () => {
   const needs = {
+    "ci-paths-scope": {
+      result: "success",
+      outputs: { "run-codeql": "false", "run-full-ci": "true" },
+    },
     codeql: { result: "skipped" },
     quality: { result: "success" },
   };
   assert.deepEqual(findNeedsFailures(needs, "pull_request"), []);
-  assert.deepEqual(findNeedsFailures(needs, "push"), ["codeql: skipped"]);
+});
+
+test("rejects codeql skipped on pull_request when run-codeql is true", () => {
+  const needs = {
+    "ci-paths-scope": {
+      result: "success",
+      outputs: { "run-codeql": "true", "run-full-ci": "true" },
+    },
+    codeql: { result: "skipped" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), ["codeql: skipped"]);
+});
+
+test("allows codeql skipped on push when docs-only scope", () => {
+  const needs = {
+    "ci-paths-scope": {
+      result: "success",
+      outputs: { "run-full-ci": "false" },
+    },
+    codeql: { result: "skipped" },
+    quality: { result: "success" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "push"), []);
 });
 
 test("allows workflow-security skipped when workflows unchanged", () => {

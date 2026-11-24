@@ -127,6 +127,8 @@ jobs:
         run: node --test .github/scripts/test-assert-pr-title-workflow.test.ts
       - name: Run ci-passed gate unit tests
         run: node --test .github/scripts/test-ci-passed-gate.test.ts
+      - name: Run ci-paths-scope CodeQL unit tests
+        run: node --test .github/scripts/test-ci-paths-run-codeql.test.ts
       - name: Run ci-passed workflow contract tests
         run: node --test .github/scripts/test-assert-ci-passed-workflow.test.ts
       - name: Run nested reusable permission contract tests

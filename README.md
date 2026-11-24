@@ -20,7 +20,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
 | [auto-merge.yml](.github/workflows/auto-merge.yml) | Approve and enable `gh pr merge --auto` for Dependabot patch/minor and Release Please patch/minor (non-breaking); major or breaking releases get `release:major-hold` for manual merge |
 | [ci-passed.yml](.github/workflows/ci-passed.yml) | Final aggregate job: fail unless every `needs` job succeeded (`if: always()`) |
-| [ci-paths-scope.yml](.github/workflows/ci-paths-scope.yml) | Docs-only skip detection (`run-full-ci` / `workflows-changed` outputs) |
+| [ci-paths-scope.yml](.github/workflows/ci-paths-scope.yml) | Paths scope (`run-full-ci`, `workflows-changed`, `product-code-changed`, `run-codeql`) |
 
 ### CodeQL SARIF security gate (artifact mode)
 

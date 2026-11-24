@@ -21,6 +21,9 @@ on:
       product-code-changed:
         description: Whether non-markdown, non-.github paths changed (string `true` or `false`)
         value: ${{ jobs.ci-paths-scope.outputs.product-code-changed }}
+      run-codeql:
+        description: Whether CodeQL should run for this event (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.run-codeql }}
 
 jobs:
   ci-paths-scope:
@@ -34,6 +37,7 @@ jobs:
       run-full-ci: ${{ steps.filter.outputs.full-ci }}
       workflows-changed: ${{ steps.filter.outputs.workflows }}
       product-code-changed: ${{ steps.product-code.outputs.product-code-changed }}
+      run-codeql: ${{ steps.run-codeql.outputs.run-codeql }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,3 +91,25 @@ jobs:
             break
           done
           echo "product-code-changed=$product" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: osloer-industries/.github
+          ref: ${{ job.workflow_sha }}
+          path: reusables-scope
+          sparse-checkout: .github/scripts/ci-paths-run-codeql.ts
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Detect CodeQL scope
+        id: run-codeql
+        env:
+          RUN_FULL_CI: ${{ steps.filter.outputs.full-ci }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          line="$(node --experimental-strip-types reusables-scope/.github/scripts/ci-paths-run-codeql.ts)"
+          echo "$line" >> "$GITHUB_OUTPUT"

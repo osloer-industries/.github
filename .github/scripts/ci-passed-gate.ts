@@ -134,11 +134,23 @@ function skippedAllowedForCodeqlJob(
   jobId: string,
   eventName: string | undefined,
   codeqlJobId: string,
+  needs: NeedsMap,
+  ciPathsScopeJobId: string,
 ): boolean {
   if (jobId !== codeqlJobId) {
     return false;
   }
-  return eventName === "pull_request";
+  if (eventName === "pull_request") {
+    const entry = needs[ciPathsScopeJobId];
+    if (entry?.result === "success" && entry.outputs?.["run-codeql"] === "false") {
+      return true;
+    }
+    return false;
+  }
+  if (isDocsOnlyCiScope(needs, ciPathsScopeJobId)) {
+    return true;
+  }
+  return false;
 }
 
 function skippedAllowedForWorkflowSecurityJob(
@@ -190,7 +202,7 @@ function skippedResultAllowed(context: SkippedResultContext): boolean {
   const { jobId, needs, eventName, jobIds } = context;
   return (
     skippedAllowedForSonarJob(jobId, eventName, jobIds.sonarZeroIssuesJobId) ||
-    skippedAllowedForCodeqlJob(jobId, eventName, jobIds.codeqlJobId) ||
+    skippedAllowedForCodeqlJob(jobId, eventName, jobIds.codeqlJobId, needs, jobIds.ciPathsScopeJobId) ||
     skippedAllowedForWorkflowSecurityJob(jobId, jobIds.workflowSecurityJobId) ||
     skippedAllowedForWorkflowOnlySonarJobs(
       jobId,
