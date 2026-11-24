@@ -83,7 +83,8 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 - **Docs-only PRs:** start CI with `.github/workflows/ci-paths-scope.yml`; gate other jobs with
   `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. When `run-full-ci` is `false`, skipped heavy jobs still
   pass **`ci-passed`**.
-- **CodeQL on PRs:** default `if` to `push` / `schedule` / `merge_group` only; gate tolerates `codeql` **skipped** on
+- **CodeQL on PRs:** use `ci-paths-scope` output `run-codeql` for source/scripts/workflows paths; always run on
+  `push` / `schedule` / `merge_group`; gate tolerates `codeql` **skipped** when `run-codeql` is `false` on
   `pull_request`.
 - **Workflow security:** run only when `workflows-changed` is `true` (or on `push` when desired); gate tolerates
   **skipped** `workflow-security`.
