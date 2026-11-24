@@ -1,0 +1,139 @@
+name: Reusable — CI paths scope
+
+on:
+  workflow_call:
+    inputs:
+      job-name:
+        description: Display name for the scope job check
+        type: string
+        default: CI paths scope
+      timeout-minutes:
+        description: Job timeout
+        type: number
+        default: 5
+    outputs:
+      run-full-ci:
+        description: Whether non-documentation paths changed (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.run-full-ci }}
+      workflows-changed:
+        description: Whether workflow or action pins changed
+        value: ${{ jobs.ci-paths-scope.outputs.workflows-changed }}
+      product-code-changed:
+        description: Whether non-markdown, non-.github paths changed (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.product-code-changed }}
+      run-codeql:
+        description: Whether CodeQL should run for this event (string `true` or `false`)
+        value: ${{ jobs.ci-paths-scope.outputs.run-codeql }}
+
+jobs:
+  ci-paths-scope:
+    name: ${{ inputs.job-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run-full-ci: ${{ steps.filter.outputs.full-ci }}
+      workflows-changed: ${{ steps.filter.outputs.workflows }}
+      product-code-changed: ${{ steps.product-code.outputs.product-code-changed }}
+      run-codeql: ${{ steps.run-codeql.outputs.run-codeql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Detect changed paths
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            full-ci:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!AGENTS.md'
+              - '!.agents/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/dependabot.yml'
+              - '.github/actions/**'
+      - name: Detect product code changes
+        id: product-code
+        env:
+          RUN_FULL_CI: ${{ steps.filter.outputs.full-ci }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN_FULL_CI" != "true" ]; then
+            echo "product-code-changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$base" ]; then
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "product-code-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -t changed < <(git diff --name-only "$base...HEAD")
+          product="false"
+          for path in "${changed[@]}"; do
+            if [[ "$path" =~ ^\.github/ ]] \
+              || [[ "$path" == AGENTS.md ]] \
+              || [[ "$path" =~ ^\.agents/ ]] \
+              || [[ "$path" =~ ^docs/ ]] \
+              || [[ "$path" =~ \.md$ ]] \
+              || [[ "$path" == scripts/template-workflows-contract.test.ts ]]; then
+              continue
+            fi
+            product="true"
+            break
+          done
+          echo "product-code-changed=$product" >> "$GITHUB_OUTPUT"
+      - name: Detect CodeQL scope
+        id: run-codeql
+        env:
+          RUN_FULL_CI: ${{ steps.filter.outputs.full-ci }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN_FULL_CI" != "true" ]; then
+            echo "run-codeql=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "run-codeql=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${PULL_REQUEST_BASE_SHA:-}"
+          if [ -z "$base" ]; then
+            base="${GITHUB_EVENT_BEFORE:-}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "run-codeql=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          run=false
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            case "$path" in
+              src/*|lib/*|app/*|api/*|_api/*|scripts/*|.github/workflows/*)
+                run=true
+                break
+                ;;
+              *)
+                ;;
+            esac
+            case "$path" in
+              *.ts|*.tsx|*.mts|*.cts|*.js|*.jsx|*.mjs|*.cjs)
+                run=true
+                break
+                ;;
+              *)
+                ;;
+            esac
+          done < <(git diff --name-only "$base"...HEAD)
+          echo "run-codeql=$run" >> "$GITHUB_OUTPUT"

@@ -30,11 +30,16 @@ if (caller.includes("pull_request_target:")) {
   fail(CALLER, "must not use pull_request_target");
 }
 
-if (!caller.includes("types: [opened, reopened, edited, synchronize]")) {
-  fail(
-    CALLER,
-    "must use pull_request types opened, reopened, edited, synchronize",
-  );
+if (caller.includes("synchronize")) {
+  fail(CALLER, "must not run PR title lint on synchronize (title cannot change on new commits)");
+}
+
+if (!caller.includes("types: [opened, reopened, edited]")) {
+  fail(CALLER, "must use pull_request types opened, reopened, edited");
+}
+
+if (!caller.includes("concurrency:")) {
+  fail(CALLER, "must define concurrency to cancel redundant title runs");
 }
 
 if (!caller.includes("permissions:\n  contents: read")) {

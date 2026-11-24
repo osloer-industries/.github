@@ -75,18 +75,22 @@ These rules apply to every agent (Cursor, Grok Bot, any other) working in this r
 
 ## ci-passed aggregate gate
 
-- Workflow: `.github/workflows/ci-passed.yml` (`workflow_call`).
-- Canonical script: `.github/scripts/ci-passed-gate.ts` (sparse checkout at `job.workflow_sha`).
-- Stable required check name: **`ci-passed`** (override with `job-name` input).
-- Caller job must use `if: always()` and pass `needs-json: ${{ toJSON(needs) }}` listing **every** upstream CI job
-  (including Workflow security, CodeQL, and SonarCloud zero open issues).
-- Org standard: list the Sonar zero-issues caller job in `ci-passed` `needs:`; give that job
-  `if: github.event_name == 'pull_request'`.
-- The gate allows **only** that job (override id via `sonar-zero-issues-job`, default `sonar-zero-open-issues`) to be
-  **skipped** on non–`pull_request` events; on `pull_request`, skipped/cancelled/missing/failure still fails
-  `ci-passed`.
-- Contract: `.github/scripts/assert-ci-passed-workflow.ts`; tests in `.github/workflows/ci.yml` (`Auto-merge unit tests`
-  / workflow-security contract job).
+- Canonical script: `.github/scripts/ci-passed-gate.ts`.
+- Preferred caller: composite action `.github/actions/ci-passed-gate` (one job, no nested `workflow_call`).
+- Legacy caller: `.github/workflows/ci-passed.yml` (`workflow_call`; composite inside by default).
+- Stable required check name: **`ci-passed`** (override with `job-name` input on the reusable workflow).
+- Caller job must use `if: always()` and pass `needs-json: ${{ toJSON(needs) }}` listing **every** upstream CI job.
+- **Docs-only PRs:** start CI with `.github/workflows/ci-paths-scope.yml`; gate other jobs with
+  `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. When `run-full-ci` is `false`, skipped heavy jobs still
+  pass **`ci-passed`**.
+- **CodeQL on PRs:** use `ci-paths-scope` output `run-codeql` for source/scripts/workflows paths; always run on
+  `push` / `schedule` / `merge_group`; gate tolerates `codeql` **skipped** when `run-codeql` is `false` on
+  `pull_request`.
+- **Workflow security:** run only when `workflows-changed` is `true` (or on `push` when desired); gate tolerates
+  **skipped** `workflow-security`.
+- **Sonar zero-open:** list the PR-only caller in `ci-passed` `needs:` with `if: github.event_name == 'pull_request'`.
+  That job may be **skipped** only on non–`pull_request` events.
+- Contract: `.github/scripts/assert-ci-passed-workflow.ts`; unit tests in `.github/scripts/test-ci-passed-gate.test.ts`.
 
 ## Auto-merge (low-risk PRs)
 
