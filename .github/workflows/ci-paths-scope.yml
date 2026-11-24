@@ -124,11 +124,15 @@ jobs:
                 run=true
                 break
                 ;;
+              *)
+                ;;
             esac
             case "$path" in
               *.ts|*.tsx|*.mts|*.cts|*.js|*.jsx|*.mjs|*.cjs)
                 run=true
                 break
+                ;;
+              *)
                 ;;
             esac
           done < <(git diff --name-only "$base"...HEAD)

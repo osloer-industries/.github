@@ -8,6 +8,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ZERO_BEFORE = "0000000000000000000000000000000000000000";
+const GIT_EXECUTABLE = "/usr/bin/git";
+const SAFE_PATH = "/usr/bin:/bin";
 const CODEQL_EXTENSION = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u;
 
 export function pathTriggersCodeql(path: string): boolean {
@@ -53,9 +55,14 @@ export function resolveRunCodeql(
 }
 
 function listChangedPaths(baseSha: string): string[] {
-  const out = execFileSync("git", ["diff", "--name-only", `${baseSha}...HEAD`], {
-    encoding: "utf8",
-  });
+  const out = execFileSync(
+    GIT_EXECUTABLE,
+    ["diff", "--name-only", `${baseSha}...HEAD`],
+    {
+      encoding: "utf8",
+      env: { PATH: SAFE_PATH },
+    },
+  );
   return out
     .split("\n")
     .map((line) => line.trim())
