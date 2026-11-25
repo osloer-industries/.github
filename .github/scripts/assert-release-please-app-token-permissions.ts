@@ -31,7 +31,7 @@ function stepBlock(yaml: string, stepId: string): string | null {
     return null;
   }
   const rest = yaml.slice(start);
-  const nextStep = rest.search(/\n      - name: /);
+  const nextStep = rest.search(/\n {6}- name: /);
   if (nextStep === -1) {
     return rest;
   }

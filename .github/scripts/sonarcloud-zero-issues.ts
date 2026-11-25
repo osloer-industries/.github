@@ -69,7 +69,8 @@ interface CeTaskDetail {
 }
 
 function basicAuthHeader(token: string): string {
-  return `Basic ${Buffer.from(`${token}:`, "utf8").toString("base64")}`;
+  const credentials = `${token}:`;
+  return `Basic ${Buffer.from(credentials, "utf8").toString("base64")}`;
 }
 
 export function resolveProjectKey(
@@ -718,11 +719,11 @@ async function main(): Promise<number> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main()
-    .then((code) => process.exit(code))
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`::error::${message}`);
-      process.exit(1);
-    });
+  try {
+    process.exit(await main());
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`::error::${message}`);
+    process.exit(1);
+  }
 }

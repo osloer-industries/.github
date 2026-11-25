@@ -111,7 +111,7 @@ function listCiJobIds(ciYaml: string): string[] {
   const lines = ciYaml.split("\n");
   let inJobs = false;
   const jobIds: string[] = [];
-  const jobIdLine = /^ {2}([\w][\w-]*):\s*$/;
+  const jobIdLine = /^ {2}(\w[\w-]*):\s*$/;
   for (const line of lines) {
     if (line === "jobs:") {
       inJobs = true;
@@ -131,6 +131,23 @@ function listCiJobIds(ciYaml: string): string[] {
   return jobIds;
 }
 
+function isSiblingJobHeader(line: string): boolean {
+  return line.startsWith("  ") && !line.startsWith("    ") && line !== "  ci-passed:";
+}
+
+function parseNeedsListItem(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("- ")) {
+    return null;
+  }
+  return trimmed.slice(2).trim();
+}
+
+function shouldEndNeedsList(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.length > 0 && !trimmed.startsWith("- ") && !line.startsWith("      ");
+}
+
 function listCiPassedNeeds(ciYaml: string): string[] | null {
   const lines = ciYaml.split("\n");
   let inCiPassed = false;
@@ -144,7 +161,7 @@ function listCiPassedNeeds(ciYaml: string): string[] | null {
     if (!inCiPassed) {
       continue;
     }
-    if (line.startsWith("  ") && !line.startsWith("    ") && line !== "  ci-passed:") {
+    if (isSiblingJobHeader(line)) {
       break;
     }
     if (line.trim() === "needs:") {
@@ -154,14 +171,14 @@ function listCiPassedNeeds(ciYaml: string): string[] | null {
     if (!inNeeds) {
       continue;
     }
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("- ")) {
-      if (line.trim().length > 0 && !line.startsWith("      ")) {
-        break;
-      }
+    const need = parseNeedsListItem(line);
+    if (need !== null) {
+      needed.push(need);
       continue;
     }
-    needed.push(trimmed.slice(2).trim());
+    if (shouldEndNeedsList(line)) {
+      break;
+    }
   }
   return inCiPassed && inNeeds ? needed : null;
 }

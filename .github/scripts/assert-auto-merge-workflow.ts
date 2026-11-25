@@ -43,7 +43,10 @@ function usesLineHas40CharSha(text: string): boolean {
     return false;
   }
   for (const ch of sha) {
-    const code = ch.charCodeAt(0);
+    const code = ch.codePointAt(0);
+    if (code === undefined) {
+      return false;
+    }
     const isDigit = code >= 48 && code <= 57;
     const isLowerHex = code >= 97 && code <= 102;
     if (!isDigit && !isLowerHex) {

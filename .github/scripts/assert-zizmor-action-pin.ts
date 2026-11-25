@@ -6,15 +6,11 @@ import { appendFileSync, readFileSync } from "node:fs";
 
 const WORKFLOW_SECURITY = ".github/workflows/workflow-security.yml";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
-const ZIZMOR_USES =
-  /zizmorcore\/zizmor-action@([0-9a-f]{40})\s*(?:#\s*v[\d.]+)?/g;
-const CI_CHECKOUT_REF =
-  /repository:\s*zizmorcore\/zizmor-action[\s\S]*?\n\s*ref:\s*([0-9a-f]{40})\s*(?:#\s*v[\d.]+)?/;
-const RUN_ZIZMOR_STEP =
-  /- name: Run zizmor\r?\n([\s\S]*?)(?=\r?\n      - |\r?\n    [a-z]|\r?\njobs:|\r?\n[^\s]|$)/;
+const ZIZMOR_USES = /zizmorcore\/zizmor-action@([0-9a-f]{40})/g;
 /** Matches zizmor-action action.sh `version` input validation */
 const ZIZMOR_VERSION_REGEX =
-  /^v?[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?(\.dev[0-9]+)?$/;
+  /^v?\d+\.\d+\.\d+((a|b|rc)\d+)?(\.dev\d+)?$/;
+const VERSION_LINE = /^\s+version:\s*(.+)\s*$/m;
 
 function load(path: string): string {
   try {
@@ -26,7 +22,12 @@ function load(path: string): string {
 }
 
 function extractZizmorPin(workflowSecurityYaml: string): string {
-  const pins = [...workflowSecurityYaml.matchAll(ZIZMOR_USES)].map((m) => m[1]);
+  const pins: string[] = [];
+  let match: RegExpExecArray | null;
+  ZIZMOR_USES.lastIndex = 0;
+  while ((match = ZIZMOR_USES.exec(workflowSecurityYaml)) !== null) {
+    pins.push(match[1]);
+  }
   if (pins.length === 0) {
     console.error(
       `::error::No zizmorcore/zizmor-action@<40-char-sha> pin found in ${WORKFLOW_SECURITY}`,
@@ -57,16 +58,26 @@ function parseYamlScalar(raw: string): string {
   return trimmed;
 }
 
-function extractPinnedZizmorVersion(workflowSecurityYaml: string): string {
-  const stepMatch = workflowSecurityYaml.match(RUN_ZIZMOR_STEP);
-  if (!stepMatch) {
+function runZizmorStepBlock(workflowSecurityYaml: string): string {
+  const marker = "- name: Run zizmor";
+  const start = workflowSecurityYaml.indexOf(marker);
+  if (start < 0) {
     console.error(
       `::error::No "Run zizmor" step found in ${WORKFLOW_SECURITY}`,
     );
     process.exit(1);
   }
-  const block = stepMatch[1];
-  const versionMatch = block.match(/^\s+version:\s*(.+)\s*$/m);
+  const rest = workflowSecurityYaml.slice(start);
+  const nextStep = rest.search(/\n {6}- /);
+  if (nextStep < 0) {
+    return rest;
+  }
+  return rest.slice(0, nextStep);
+}
+
+function extractPinnedZizmorVersion(workflowSecurityYaml: string): string {
+  const block = runZizmorStepBlock(workflowSecurityYaml);
+  const versionMatch = VERSION_LINE.exec(block);
   if (!versionMatch) {
     console.error(
       `::error::Run zizmor step in ${WORKFLOW_SECURITY} must set an explicit pinned "version:" input (not omitted — default is latest)`,
@@ -89,15 +100,25 @@ function extractPinnedZizmorVersion(workflowSecurityYaml: string): string {
   return version.startsWith("v") ? version.slice(1) : version;
 }
 
+function ciCheckoutRef(ciYaml: string): string | null {
+  const repoNeedle = "repository: zizmorcore/zizmor-action";
+  const repoIndex = ciYaml.indexOf(repoNeedle);
+  if (repoIndex < 0) {
+    return null;
+  }
+  const window = ciYaml.slice(repoIndex, repoIndex + 400);
+  const refMatch = /ref:\s*([0-9a-f]{40})/.exec(window);
+  return refMatch?.[1] ?? null;
+}
+
 function assertCiCheckoutMatches(
   ciYaml: string,
   expectedSha: string,
 ): void {
-  const match = ciYaml.match(CI_CHECKOUT_REF);
-  if (!match) {
+  const ciRef = ciCheckoutRef(ciYaml);
+  if (ciRef === null) {
     return;
   }
-  const ciRef = match[1];
   if (ciRef !== expectedSha) {
     console.error(
       `::error::CI self-test zizmor-action checkout ref ${ciRef} does not match ${WORKFLOW_SECURITY} pin ${expectedSha}`,

@@ -31,6 +31,10 @@ const JOB_SCALAR_KEYS = new Set([
   "concurrency",
 ]);
 
+const JOB_HEADER_LINE = /^ {2}(\w[\w-]*):\s*$/;
+const SIBLING_JOB_LINE = /^ {2}\S/;
+const JOB_SCALAR_LINE = /^ {4}(\w[\w-]*):\s*(.+)$/;
+
 function load(path: string): string {
   try {
     return readFileSync(path, "utf8");
@@ -50,12 +54,20 @@ function hasWorkflowCallAndDirectTrigger(yaml: string): boolean {
   return DIRECT_TRIGGERS.some((trigger) => yaml.includes(`\n  ${trigger}`) || yaml.includes(`\n${trigger}`));
 }
 
+function inputsNeedFallback(key: string, value: string): boolean {
+  return (
+    JOB_SCALAR_KEYS.has(key) &&
+    value.includes("${{") &&
+    value.includes("inputs.") &&
+    !value.includes("||")
+  );
+}
+
 function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: string; text: string }[] {
   const lines = yaml.split("\n");
   const findings: { jobId: string; line: string; text: string }[] = [];
   let inJobs = false;
   let currentJob = "";
-  let jobIndent = 0;
   let inSteps = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -67,10 +79,9 @@ function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: strin
     if (!inJobs) {
       continue;
     }
-    const jobMatch = line.match(/^ {2}([\w][\w-]*):\s*$/);
+    const jobMatch = JOB_HEADER_LINE.exec(line);
     if (jobMatch) {
       currentJob = jobMatch[1] ?? "";
-      jobIndent = 2;
       inSteps = false;
       continue;
     }
@@ -84,23 +95,20 @@ function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: strin
     if (inSteps) {
       continue;
     }
-    if (!line.startsWith(" ".repeat(jobIndent + 2))) {
-      if (line.match(/^ {2}\S/)) {
+    if (!line.startsWith("    ")) {
+      if (SIBLING_JOB_LINE.exec(line)) {
         currentJob = "";
         inSteps = false;
       }
       continue;
     }
-    const scalar = line.match(/^ {4}([\w][\w-]*):\s*(.+)\s*$/);
+    const scalar = JOB_SCALAR_LINE.exec(line);
     if (!scalar) {
       continue;
     }
     const key = scalar[1] ?? "";
-    const value = scalar[2] ?? "";
-    if (!JOB_SCALAR_KEYS.has(key)) {
-      continue;
-    }
-    if (value.includes("${{") && value.includes("inputs.") && !value.includes("||")) {
+    const value = (scalar[2] ?? "").trimEnd();
+    if (inputsNeedFallback(key, value)) {
       findings.push({
         jobId: currentJob,
         line: String(i + 1),

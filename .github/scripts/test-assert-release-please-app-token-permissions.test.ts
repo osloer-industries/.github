@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 
 const SCRIPT = fileURLToPath(
   new URL("./assert-release-please-app-token-permissions.ts", import.meta.url),
@@ -63,6 +64,10 @@ jobs:
           permission-contents: write
 `;
 
-assert.equal(run(GOOD), 0);
-assert.notEqual(run(BAD), 0);
-console.log("assert-release-please-app-token-permissions contract self-test OK");
+test("assert-release-please-app-token-permissions passes when token steps request workflow write", () => {
+  assert.equal(run(GOOD), 0);
+});
+
+test("assert-release-please-app-token-permissions fails when permissions or description are incomplete", () => {
+  assert.notEqual(run(BAD), 0);
+});
