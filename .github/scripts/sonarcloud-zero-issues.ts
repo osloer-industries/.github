@@ -723,7 +723,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(await main());
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`::error::${message}`);
+    console.error(`::error::${JSON.stringify(message)}`);
     process.exit(1);
   }
 }

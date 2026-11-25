@@ -7,10 +7,43 @@ import { appendFileSync, readFileSync } from "node:fs";
 const WORKFLOW_SECURITY = ".github/workflows/workflow-security.yml";
 const CI_WORKFLOW = ".github/workflows/ci.yml";
 const ZIZMOR_USES = /zizmorcore\/zizmor-action@([0-9a-f]{40})/g;
-/** Matches zizmor-action action.sh `version` input validation */
-const ZIZMOR_VERSION_REGEX =
-  /^v?\d+\.\d+\.\d+((a|b|rc)\d+)?(\.dev\d+)?$/;
-const VERSION_LINE = /^\s+version:\s*(.+)\s*$/m;
+/** Matches zizmor-action action.sh `version` input validation (no nested-regex backtracking). */
+function isValidZizmorVersion(version: string): boolean {
+  const core = version.startsWith("v") ? version.slice(1) : version;
+  const parts = core.split(".");
+  if (parts.length < 3) {
+    return false;
+  }
+  const major = parts[0];
+  const minor = parts[1];
+  const patchAndSuffix = parts.slice(2).join(".");
+  if (!/^\d+$/.test(major) || !/^\d+$/.test(minor)) {
+    return false;
+  }
+  const patchMatch = /^(\d+)(.*)$/.exec(patchAndSuffix);
+  if (!patchMatch) {
+    return false;
+  }
+  const suffix = patchMatch[2];
+  if (suffix === "") {
+    return true;
+  }
+  if (suffix.startsWith(".dev")) {
+    return /^\.dev\d+$/.test(suffix);
+  }
+  return /^(a|b|rc)\d+$/.test(suffix);
+}
+
+function versionFromZizmorStepBlock(block: string): string | null {
+  for (const line of block.split("\n")) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith("version:")) {
+      continue;
+    }
+    return trimmed.slice("version:".length).trim();
+  }
+  return null;
+}
 
 function load(path: string): string {
   try {
@@ -77,21 +110,21 @@ function runZizmorStepBlock(workflowSecurityYaml: string): string {
 
 function extractPinnedZizmorVersion(workflowSecurityYaml: string): string {
   const block = runZizmorStepBlock(workflowSecurityYaml);
-  const versionMatch = VERSION_LINE.exec(block);
-  if (!versionMatch) {
+  const rawVersion = versionFromZizmorStepBlock(block);
+  if (rawVersion === null) {
     console.error(
       `::error::Run zizmor step in ${WORKFLOW_SECURITY} must set an explicit pinned "version:" input (not omitted — default is latest)`,
     );
     process.exit(1);
   }
-  const version = parseYamlScalar(versionMatch[1]);
+  const version = parseYamlScalar(rawVersion);
   if (version === "" || version === "latest" || version === "prerelease") {
     console.error(
       `::error::zizmor "version" in ${WORKFLOW_SECURITY} must be an exact X.Y.Z release, not empty, latest, or prerelease (got ${JSON.stringify(version)})`,
     );
     process.exit(1);
   }
-  if (!ZIZMOR_VERSION_REGEX.test(version)) {
+  if (!isValidZizmorVersion(version)) {
     console.error(
       `::error::zizmor "version" in ${WORKFLOW_SECURITY} must match semver (optionally v-prefixed); got ${JSON.stringify(version)}`,
     );

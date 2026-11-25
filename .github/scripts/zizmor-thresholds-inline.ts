@@ -18,7 +18,7 @@ const HEREDOC_TARGET = `cat <<'${MARKER}' >"$VALIDATE_TS"`;
 const REGEXP_METACHAR = /[.*+?^${}()|[\]\\]/g;
 
 function escapeForRegExp(text: string): string {
-  return text.replace(REGEXP_METACHAR, "\\$&");
+  return text.replace(REGEXP_METACHAR, String.raw`\$&`);
 }
 
 function canonicalBody(): string {

@@ -33,7 +33,21 @@ const JOB_SCALAR_KEYS = new Set([
 
 const JOB_HEADER_LINE = /^ {2}(\w[\w-]*):\s*$/;
 const SIBLING_JOB_LINE = /^ {2}\S/;
-const JOB_SCALAR_LINE = /^ {4}(\w[\w-]*):\s*(.+)$/;
+
+function parseJobScalarLine(line: string): { key: string; value: string } | null {
+  if (!line.startsWith("    ")) {
+    return null;
+  }
+  const colon = line.indexOf(":", 4);
+  if (colon < 0) {
+    return null;
+  }
+  const key = line.slice(4, colon).trim();
+  if (!/^\w[\w-]*$/.test(key)) {
+    return null;
+  }
+  return { key, value: line.slice(colon + 1).trimEnd() };
+}
 
 function load(path: string): string {
   try {
@@ -102,12 +116,11 @@ function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: strin
       }
       continue;
     }
-    const scalar = JOB_SCALAR_LINE.exec(line);
-    if (!scalar) {
+    const scalar = parseJobScalarLine(line);
+    if (scalar === null) {
       continue;
     }
-    const key = scalar[1] ?? "";
-    const value = (scalar[2] ?? "").trimEnd();
+    const { key, value } = scalar;
     if (inputsNeedFallback(key, value)) {
       findings.push({
         jobId: currentJob,
