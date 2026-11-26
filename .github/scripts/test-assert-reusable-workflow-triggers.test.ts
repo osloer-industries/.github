@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { test } from "node:test";
 
 const SCRIPT = fileURLToPath(
   new URL("./assert-reusable-workflow-triggers.ts", import.meta.url),
@@ -71,7 +72,14 @@ jobs:
       - run: echo bad
 `;
 
-assert.equal(runInRepo({ "good.yml": GOOD }).status, 0);
-assert.notEqual(runInRepo({ "bad-event.yml": BAD_EVENT }).status, 0);
-assert.notEqual(runInRepo({ "bad-inputs.yml": BAD_INPUTS }).status, 0);
-console.log("assert-reusable-workflow-triggers contract self-test OK");
+test("assert-reusable-workflow-triggers passes with input fallbacks on direct push", () => {
+  assert.equal(runInRepo({ "good.yml": GOOD }).status, 0);
+});
+
+test("assert-reusable-workflow-triggers rejects workflow_call event_name checks", () => {
+  assert.notEqual(runInRepo({ "bad-event.yml": BAD_EVENT }).status, 0);
+});
+
+test("assert-reusable-workflow-triggers rejects job-level inputs without fallbacks", () => {
+  assert.notEqual(runInRepo({ "bad-inputs.yml": BAD_INPUTS }).status, 0);
+});

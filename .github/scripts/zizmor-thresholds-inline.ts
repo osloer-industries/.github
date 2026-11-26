@@ -15,6 +15,12 @@ const MARKER = "ZIZMOR_THRESHOLDS_INLINE";
 const INLINE_INDENT = "          ";
 const HEREDOC_TARGET = `cat <<'${MARKER}' >"$VALIDATE_TS"`;
 
+const REGEXP_METACHAR = /[.*+?^${}()|[\]\\]/g;
+
+function escapeForRegExp(text: string): string {
+  return text.replace(REGEXP_METACHAR, String.raw`\$&`);
+}
+
 function canonicalBody(): string {
   let text = readFileSync(CANONICAL, { encoding: "utf-8" });
   const lines = text.split("\n");
@@ -24,7 +30,7 @@ function canonicalBody(): string {
   while (lines.length > 0 && !lines[0]?.trim()) {
     lines.shift();
   }
-  while (lines.length > 0 && !lines[lines.length - 1]?.trim()) {
+  while (lines.length > 0 && !lines.at(-1)?.trim()) {
     lines.pop();
   }
   return `${lines.join("\n")}\n`;
@@ -39,11 +45,13 @@ function indentScript(body: string): string {
 
 function extractInlineBody(workflowPath: string = WORKFLOW): string {
   const content = readFileSync(workflowPath, { encoding: "utf-8" });
-  const escapedTarget = HEREDOC_TARGET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedTarget = escapeForRegExp(HEREDOC_TARGET);
   const pattern = new RegExp(
-    `^[ \\t]*${escapedTarget}\\n` +
-      "([\\s\\S]*?)" +
-      `^[ \\t]*${MARKER}[ \\t]*\\n`,
+    String.raw`^[ \t]*` +
+      escapedTarget +
+      String.raw`\n([\s\S]*?)^[ \t]*` +
+      escapeForRegExp(MARKER) +
+      String.raw`[ \t]*\n`,
     "m",
   );
   const match = pattern.exec(content);
@@ -56,7 +64,7 @@ function extractInlineBody(workflowPath: string = WORKFLOW): string {
   while (lines.length > 0 && !lines[0]?.trim()) {
     lines.shift();
   }
-  while (lines.length > 0 && !lines[lines.length - 1]?.trim()) {
+  while (lines.length > 0 && !lines.at(-1)?.trim()) {
     lines.pop();
   }
   if (lines.length === 0) {
@@ -78,7 +86,7 @@ function extractInlineBody(workflowPath: string = WORKFLOW): string {
   while (stripped.length > 0 && !stripped[0]?.trim()) {
     stripped.shift();
   }
-  while (stripped.length > 0 && !stripped[stripped.length - 1]?.trim()) {
+  while (stripped.length > 0 && !stripped.at(-1)?.trim()) {
     stripped.pop();
   }
   return `${stripped.join("\n")}\n`;
@@ -97,25 +105,29 @@ function assertInlineMatchesCanonical(): void {
   }
 }
 
+const INSERT_AFTER_STEP =
+  /(- name: Validate zizmor min severity and confidence\n {8}env:\n {10}ZIZMOR_MIN_SEVERITY: \$\{\{ inputs\.min-severity \}\}\n {10}ZIZMOR_MIN_CONFIDENCE: \$\{\{ inputs\.min-confidence \}\}\n {8}run: \|\n {10}set -euo pipefail\n {10}VALIDATE_TS="\$\(mktemp --suffix=\.mts\)"\n {10}trap 'rm -f "\$VALIDATE_TS"' EXIT\n)/;
+
 function writeInlineIntoWorkflow(): void {
   const body = indentScript(canonicalBody().replace(/\n$/, ""));
   const content = readFileSync(WORKFLOW, { encoding: "utf-8" });
-  const escapedTarget = HEREDOC_TARGET.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedTarget = escapeForRegExp(HEREDOC_TARGET);
   const pattern = new RegExp(
-    `(^[ \\t]*${escapedTarget}\\n)` +
-      "[\\s\\S]*?" +
-      `(^[ \\t]*${MARKER}[ \\t]*\\n)`,
+    String.raw`(^[ \t]*` +
+      escapedTarget +
+      String.raw`\n)[\s\S]*?(^[ \t]*` +
+      escapeForRegExp(MARKER) +
+      String.raw`[ \t]*\n)`,
     "m",
   );
   const updated = content.replace(pattern, `$1${body}\n$2`);
   if (updated === content) {
-    const insertAfter =
-      /(- name: Validate zizmor min severity and confidence\n        env:\n          ZIZMOR_MIN_SEVERITY: \$\{\{ inputs\.min-severity \}\}\n          ZIZMOR_MIN_CONFIDENCE: \$\{\{ inputs\.min-confidence \}\}\n        run: \|\n          set -euo pipefail\n          VALIDATE_TS="\$\(mktemp --suffix=\.mts\)"\n          trap 'rm -f "\$VALIDATE_TS"' EXIT\n)/;
+    const insertAfter = INSERT_AFTER_STEP;
     const block =
-      `$1          cat <<'${MARKER}' >"$VALIDATE_TS"\n` +
+      `$1${INLINE_INDENT}cat <<'${MARKER}' >"$VALIDATE_TS"\n` +
       `${body}\n` +
-      `          ${MARKER}\n` +
-      `          node --experimental-strip-types "$VALIDATE_TS"\n`;
+      `${INLINE_INDENT}${MARKER}\n` +
+      `${INLINE_INDENT}node --experimental-strip-types "$VALIDATE_TS"\n`;
     const withBlock = content.replace(insertAfter, block);
     if (withBlock === content) {
       console.error(

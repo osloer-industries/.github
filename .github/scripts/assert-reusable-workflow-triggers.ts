@@ -31,6 +31,24 @@ const JOB_SCALAR_KEYS = new Set([
   "concurrency",
 ]);
 
+const JOB_HEADER_LINE = /^ {2}(\w[\w-]*):\s*$/;
+const SIBLING_JOB_LINE = /^ {2}\S/;
+
+function parseJobScalarLine(line: string): { key: string; value: string } | null {
+  if (!line.startsWith("    ")) {
+    return null;
+  }
+  const colon = line.indexOf(":", 4);
+  if (colon < 0) {
+    return null;
+  }
+  const key = line.slice(4, colon).trim();
+  if (!/^\w[\w-]*$/.test(key)) {
+    return null;
+  }
+  return { key, value: line.slice(colon + 1).trimEnd() };
+}
+
 function load(path: string): string {
   try {
     return readFileSync(path, "utf8");
@@ -50,12 +68,20 @@ function hasWorkflowCallAndDirectTrigger(yaml: string): boolean {
   return DIRECT_TRIGGERS.some((trigger) => yaml.includes(`\n  ${trigger}`) || yaml.includes(`\n${trigger}`));
 }
 
+function inputsNeedFallback(key: string, value: string): boolean {
+  return (
+    JOB_SCALAR_KEYS.has(key) &&
+    value.includes("${{") &&
+    value.includes("inputs.") &&
+    !value.includes("||")
+  );
+}
+
 function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: string; text: string }[] {
   const lines = yaml.split("\n");
   const findings: { jobId: string; line: string; text: string }[] = [];
   let inJobs = false;
   let currentJob = "";
-  let jobIndent = 0;
   let inSteps = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -67,10 +93,9 @@ function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: strin
     if (!inJobs) {
       continue;
     }
-    const jobMatch = line.match(/^ {2}([\w][\w-]*):\s*$/);
+    const jobMatch = JOB_HEADER_LINE.exec(line);
     if (jobMatch) {
       currentJob = jobMatch[1] ?? "";
-      jobIndent = 2;
       inSteps = false;
       continue;
     }
@@ -84,23 +109,19 @@ function jobLevelScalarsWithoutSteps(yaml: string): { jobId: string; line: strin
     if (inSteps) {
       continue;
     }
-    if (!line.startsWith(" ".repeat(jobIndent + 2))) {
-      if (line.match(/^ {2}\S/)) {
+    if (!line.startsWith("    ")) {
+      if (SIBLING_JOB_LINE.exec(line)) {
         currentJob = "";
         inSteps = false;
       }
       continue;
     }
-    const scalar = line.match(/^ {4}([\w][\w-]*):\s*(.+)\s*$/);
-    if (!scalar) {
+    const scalar = parseJobScalarLine(line);
+    if (scalar === null) {
       continue;
     }
-    const key = scalar[1] ?? "";
-    const value = scalar[2] ?? "";
-    if (!JOB_SCALAR_KEYS.has(key)) {
-      continue;
-    }
-    if (value.includes("${{") && value.includes("inputs.") && !value.includes("||")) {
+    const { key, value } = scalar;
+    if (inputsNeedFallback(key, value)) {
       findings.push({
         jobId: currentJob,
         line: String(i + 1),
