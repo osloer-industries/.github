@@ -117,6 +117,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+      - name: Run auto-merge gh repo targeting unit tests
+        run: node --test .github/scripts/test-auto-merge-gh.test.ts
       - name: Run auto-merge eligibility unit tests
         run: node --test .github/scripts/test-auto-merge-eligibility.test.ts
       - name: Run release-please version gate unit tests
