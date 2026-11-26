@@ -15,7 +15,7 @@ Reference contract: [typescript-node-template](https://github.com/osloer-industr
 | [sonarqube-cloud-node.yml](.github/workflows/sonarqube-cloud-node.yml) | SonarQube Cloud with npm coverage prep |
 | [sonarcloud-zero-issues.yml](.github/workflows/sonarcloud-zero-issues.yml) | Fail when SonarCloud still has OPEN/CONFIRMED PR issues (beyond the Sonar way gate) |
 | [node-npm-quality.yml](.github/workflows/node-npm-quality.yml) | `npm ci`, audit, `npm run` via `check-npm-script` (default `check`) |
-| [mutation-changed.yml](.github/workflows/mutation-changed.yml) | Stryker on changed `src/` for PRs; full mutation script on default-branch push |
+| [mutation-changed.yml](.github/workflows/mutation-changed.yml) | Stryker on changed `src/` for PRs and merge-queue commits; full mutation script on default-branch push |
 | [node-setup-smoke.yml](.github/workflows/node-setup-smoke.yml) | Matrix setup smoke via `setup-npm-script` (default `setup`) |
 | [workflow-security.yml](.github/workflows/workflow-security.yml) | actionlint + zizmor (fail-closed, no Python) |
 | [auto-merge.yml](.github/workflows/auto-merge.yml) | Approve and enable `gh pr merge --auto` for Dependabot patch/minor and Release Please patch/minor (non-breaking); major or breaking releases get `release:major-hold` for manual merge |
@@ -51,7 +51,7 @@ SonarCloud’s built-in **Sonar way** quality gate ignores raw open-issue counts
 
 Reusable [`mutation-changed.yml`](.github/workflows/mutation-changed.yml) runs Stryker against changed non-test `src/**/*.ts` on pull requests (via [`.github/scripts/run-mutation-changed.ts`](.github/scripts/run-mutation-changed.ts)) and `npm run test:mutation` (configurable) on pushes to the default branch. Callers must define Stryker and the full mutation npm script locally; pin `uses:` to a full commit SHA; the helper is fetched at **`job.workflow_sha`**.
 
-See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML, semver tags, and Dependabot.
+See [docs/consuming-workflows.md](docs/consuming-workflows.md) for caller YAML, semver tags, Dependabot, and [merge queue (`merge_group`) opt-in](docs/consuming-workflows.md#merge-queue-merge_group).
 
 This repository publishes immutable release tags (`v0.1.0`, `v0.2.0`, … until `v1.0.0`) via [Release Please](.github/workflows/release-please.yml) on `push` to `main` (same pattern as workflow-security — no thin caller with `uses: ./`, which zizmor flags). On each push, the job mints an installation token for the **osloer-reviewer** GitHub App (`vars.OSLOER_RELEASE_APP_ID`, repository secret `RELEASE_APP_PRIVATE_KEY` holding the PEM, scoped to this repository only) so Release Please opens release PRs that trigger CI like any other contributor. The app is installed on the **osloer-industries** org with **Contents**, **Workflows**, and **Pull requests** read and write. A maintainer merges the release PR when checks are green; that merge creates the Git tag (the automatic release step).
 

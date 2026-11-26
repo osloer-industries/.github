@@ -75,10 +75,11 @@ jobs:
           pm="reusables/.github/actions/package-manager/package-manager.ts"
           "$runner" "$pm" validate
           NPM_CI_IGNORE_SCRIPTS=true "$runner" "$pm" install
-      - name: Mutation (changed src on pull request)
-        if: github.event_name == 'pull_request'
+      - name: Mutation (changed src on pull request or merge group)
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
-          MUTATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
+          MUTATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          MUTATION_HEAD_REF: ${{ github.event.merge_group.head_sha || 'HEAD' }}
           MUTATION_REPO_ROOT: ${{ github.workspace }}
           PACKAGE_MANAGER: ${{ inputs.package-manager }}
         run: |

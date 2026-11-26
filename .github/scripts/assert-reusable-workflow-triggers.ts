@@ -14,6 +14,7 @@ const DIRECT_TRIGGERS = [
   "pull_request_target:",
   "workflow_dispatch:",
   "schedule:",
+  "merge_group:",
 ] as const;
 
 const JOB_SCALAR_KEYS = new Set([

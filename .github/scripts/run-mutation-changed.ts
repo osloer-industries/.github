@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * On pull requests, run Stryker only on changed non-test files under src/.
- * Caller must checkout with fetch-depth: 0 and set MUTATION_BASE_REF to the PR base SHA.
+ * On pull requests and merge_group, run Stryker only on changed non-test files under src/.
+ * Caller must checkout with fetch-depth: 0 and set MUTATION_BASE_REF to the PR or merge_group base SHA.
  */
 
 import { execFileSync } from "node:child_process";
