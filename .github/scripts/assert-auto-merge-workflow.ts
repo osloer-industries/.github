@@ -165,6 +165,13 @@ if (!scriptCallsGhPrMergeAuto(script)) {
   fail(".github/scripts/auto-merge.ts", 'must call gh(["pr", "merge", ..., "--auto", ...]) only');
 }
 
+if (!script.includes("withGhRepo") || !script.includes("GH_REPO")) {
+  fail(
+    ".github/scripts/auto-merge.ts",
+    "gh() must pass -R and GH_REPO so pr review/merge work without a workspace git repo",
+  );
+}
+
 if (reusable.includes("persist-credentials: true")) {
   fail(REUSABLE, "checkout must not set persist-credentials: true");
 }
