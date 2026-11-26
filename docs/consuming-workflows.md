@@ -60,7 +60,7 @@ Org **AGENTS.md** (in this repository and copied into consumer repos) requires C
 | `sonarqube-cloud-node.yml` | Analyze | `pull_request`, `push` to default branch |
 | `sonarcloud-zero-issues.yml` | SonarCloud zero open issues | `pull_request` (all base branches — no `branches:` filter) |
 | `node-npm-quality.yml` | Quality (override with `job-name`) | `pull_request`, `push` to default branch |
-| `mutation-changed.yml` | Mutation (override with `job-name`) | `pull_request`, `push` to default branch |
+| `mutation-changed.yml` | Mutation (override with `job-name`) | `pull_request`, `push` to default branch, `merge_group` (`checks_requested`) on the caller CI workflow |
 | `node-setup-smoke.yml` | Setup smoke (matrix) | `pull_request`, `push` to default branch |
 | `workflow-security.yml` | Workflow security (actionlint + zizmor) | `pull_request`, `push` to default branch |
 | `auto-merge.yml` | Auto-merge (optional; osloer-reviewer) | `pull_request` (types: opened, synchronize, reopened, ready_for_review) |
@@ -565,6 +565,7 @@ Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and a
 | Job | May be `skipped` when |
 | --- | --- |
 | `sonar-zero-open-issues` | non–`pull_request` events (PR-only caller job) |
+| `sonar-analyze` | `merge_group` only (queue commits skip PR-oriented Sonar analyse; CodeQL and tests still run) |
 | `codeql` | `pull_request` when `run-codeql` is `false` (docs/config-only); always on `push` / `schedule` / `merge_group` when `run-full-ci` |
 | `workflow-security` | job-level `if` skipped the run (no workflow file changes) |
 | Heavy jobs (`quality`, scanners, …) | `ci-paths-scope` output `run-full-ci` is `false` (docs-only PR) |
@@ -582,6 +583,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "17 3 * * 1"
 
@@ -628,7 +631,9 @@ jobs:
 
   sonar-analyze:
     needs: ci-paths-scope
-    if: needs.ci-paths-scope.outputs.run-full-ci == 'true'
+    if: |
+      needs.ci-paths-scope.outputs.run-full-ci == 'true' &&
+      github.event_name != 'merge_group'
     uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -664,6 +669,27 @@ jobs:
 ```
 
 This repository’s [`ci.yml`](.github/workflows/ci.yml) ends with an **inlined** `ci-passed` job (same `ci-passed-gate.ts` logic). [`workflow-security.yml`](.github/workflows/workflow-security.yml) still lists `pull_request` / `push` here so the gate runs on every change to this repository without a same-repo `workflow_call`.
+
+### Merge queue (`merge_group`)
+
+[GitHub merge queues](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) run CI on temporary `gh-readonly-queue/*` refs before merging. Opt in on the **caller** `ci.yml`:
+
+```yaml
+on:
+  merge_group:
+    types: [checks_requested]
+```
+
+In the repository **ruleset** (or branch protection) merge-queue settings, list **`ci-passed`** as a required check—the aggregate job name your workflow exposes (for example `ci-passed / ci-passed` when the workflow and job share that name).
+
+Behaviour with these reusables:
+
+- **Mutation** (`mutation-changed.yml`): changed-file mutation runs on `merge_group`, diffing `github.event.merge_group.base_sha`…`head_sha` (same as pull requests).
+- **SonarCloud zero open issues**: remains pull-request-only; the gate allows it to be `skipped` on `merge_group`.
+- **Sonar analyse** (`sonarqube-cloud-node.yml`): skip the caller job on `merge_group` (see the `sonar-analyze` `if:` in the CI example above). `ci-passed-gate` allows that skip **only** on `merge_group`.
+- **CodeQL, tests, quality, workflow-security**: keep running when `run-full-ci` is true (CodeQL is always on for non–`pull_request` events, including `merge_group`).
+
+This repository’s own [`ci.yml`](.github/workflows/ci.yml) lists `merge_group` so the inlined `ci-passed` gate is exercised on queue commits.
 
 ### Workflow security (actionlint + zizmor)
 

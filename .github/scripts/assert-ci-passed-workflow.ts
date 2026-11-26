@@ -39,6 +39,18 @@ if (!script.includes("ALLOWED_NEEDS_RESULTS")) {
   fail(GATE_SCRIPT, "must fail closed with an explicit success-only allowlist");
 }
 
+if (!script.includes('eventName === "merge_group"')) {
+  fail(GATE_SCRIPT, "must allow sonar-analyze skipped only on merge_group");
+}
+
+if (!ci.includes("merge_group:")) {
+  fail(CI_WORKFLOW, "must list merge_group in on: for merge queue support");
+}
+
+if (!ci.includes("checks_requested")) {
+  fail(CI_WORKFLOW, "merge_group must use types: [checks_requested]");
+}
+
 if (!reusable.includes("GITHUB_EVENT_NAME")) {
   fail(REUSABLE, "must pass GITHUB_EVENT_NAME into the gate step");
 }

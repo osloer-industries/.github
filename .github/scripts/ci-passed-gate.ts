@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fail closed unless every entry in the GitHub Actions `needs` context is result success.
- * Selective `skipped` results are allowed for event-scoped jobs, workflow-only gates, docs-only CI, and CodeQL off PRs.
+ * Selective `skipped` results are allowed for event-scoped jobs, workflow-only gates, docs-only CI, CodeQL off PRs, and sonar-analyze on merge_group only.
  */
 
 import { fileURLToPath } from "node:url";
@@ -130,6 +130,16 @@ function skippedAllowedForSonarJob(
   return eventName !== undefined && eventName.length > 0;
 }
 
+function skippedAllowedForSonarAnalyzeOnMergeGroup(
+  jobId: string,
+  eventName: string | undefined,
+): boolean {
+  if (jobId !== DEFAULT_SONAR_ANALYZE_JOB_ID) {
+    return false;
+  }
+  return eventName === "merge_group";
+}
+
 function skippedAllowedForCodeqlJob(
   jobId: string,
   eventName: string | undefined,
@@ -202,6 +212,7 @@ function skippedResultAllowed(context: SkippedResultContext): boolean {
   const { jobId, needs, eventName, jobIds } = context;
   return (
     skippedAllowedForSonarJob(jobId, eventName, jobIds.sonarZeroIssuesJobId) ||
+    skippedAllowedForSonarAnalyzeOnMergeGroup(jobId, eventName) ||
     skippedAllowedForCodeqlJob(jobId, eventName, jobIds.codeqlJobId, needs, jobIds.ciPathsScopeJobId) ||
     skippedAllowedForWorkflowSecurityJob(jobId, jobIds.workflowSecurityJobId) ||
     skippedAllowedForWorkflowOnlySonarJobs(

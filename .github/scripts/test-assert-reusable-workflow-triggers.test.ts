@@ -41,6 +41,18 @@ jobs:
       - run: echo ok
 `;
 
+const GOOD_MERGE_GROUP = `
+on:
+  workflow_call: {}
+  merge_group:
+    types: [checks_requested]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+`;
+
 const BAD_EVENT = `
 on:
   workflow_call: {}
@@ -72,6 +84,7 @@ jobs:
 `;
 
 assert.equal(runInRepo({ "good.yml": GOOD }).status, 0);
+assert.equal(runInRepo({ "merge-group.yml": GOOD_MERGE_GROUP }).status, 0);
 assert.notEqual(runInRepo({ "bad-event.yml": BAD_EVENT }).status, 0);
 assert.notEqual(runInRepo({ "bad-inputs.yml": BAD_INPUTS }).status, 0);
 console.log("assert-reusable-workflow-triggers contract self-test OK");

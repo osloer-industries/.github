@@ -19,6 +19,17 @@ test("findNeedsFailures accepts success only by default", () => {
   ]);
 });
 
+test("allows sonar-analyze skipped only on merge_group", () => {
+  const needs = {
+    "sonar-analyze": { result: "skipped" },
+    quality: { result: "success" },
+  };
+  assert.deepEqual(findNeedsFailures(needs, "merge_group"), []);
+  assert.deepEqual(findNeedsFailures(needs, "push"), ["sonar-analyze: skipped"]);
+  assert.deepEqual(findNeedsFailures(needs, "pull_request"), ["sonar-analyze: skipped"]);
+  assert.deepEqual(findNeedsFailures(needs, "schedule"), ["sonar-analyze: skipped"]);
+});
+
 test("allows sonar-zero-open-issues skipped on push", () => {
   const needs = {
     "sonar-zero-open-issues": { result: "skipped" },
