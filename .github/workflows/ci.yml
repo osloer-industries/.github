@@ -135,6 +135,8 @@ jobs:
         run: node --test .github/scripts/test-assert-ci-passed-workflow.test.ts
       - name: Run nested reusable permission contract tests
         run: node --test .github/scripts/test-assert-nested-reusable-permissions.test.ts
+      - name: Run zizmor action pin unit tests
+        run: node --test .github/scripts/test-assert-zizmor-action-pin.test.ts
 
   package-manager-unit:
     name: Package manager unit tests
