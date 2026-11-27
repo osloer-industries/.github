@@ -1,12 +1,11 @@
 /**
- * Contract checks for auto-merge reusable workflow and caller (pinned actions, no
- * pull_request_target, no PR checkout, auto-merge only via gh --auto).
+ * Contract checks for auto-merge reusable workflow wiring that workflow-security
+ * (actionlint + zizmor) does not enforce: sparse-checkout scripts, preflights,
+ * gh --auto/--disable-auto only via auto-merge.ts, and org merge gates.
  */
 import { readFileSync } from "node:fs";
 
 const REUSABLE = ".github/workflows/auto-merge.yml";
-
-const FULL_SHA_RE = /@[0-9a-f]{40}\s+#\s+v[\d.]+\s*$/;
 
 function load(path: string): string {
   try {
@@ -17,42 +16,6 @@ function load(path: string): string {
   }
 }
 
-function linesWithUses(yaml: string): { line: number; text: string }[] {
-  const out: { line: number; text: string }[] = [];
-  const lines = yaml.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (line.includes("uses:")) {
-      out.push({ line: i + 1, text: line.trim() });
-    }
-  }
-  return out;
-}
-
-function usesLineHasFullShaPin(text: string): boolean {
-  return FULL_SHA_RE.exec(text) !== null;
-}
-
-function usesLineHas40CharSha(text: string): boolean {
-  const at = text.indexOf("@");
-  if (at < 0) {
-    return false;
-  }
-  const sha = text.slice(at + 1, at + 41);
-  if (sha.length !== 40) {
-    return false;
-  }
-  for (const ch of sha) {
-    const code = ch.charCodeAt(0);
-    const isDigit = code >= 48 && code <= 57;
-    const isLowerHex = code >= 97 && code <= 102;
-    if (!isDigit && !isLowerHex) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function scriptCallsGhPrMergeAuto(script: string): boolean {
   return (
     script.includes('"pr"') &&
@@ -60,6 +23,10 @@ function scriptCallsGhPrMergeAuto(script: string): boolean {
     script.includes('"--auto"') &&
     script.includes("gh(")
   );
+}
+
+function scriptCallsGhPrMergeDisableAuto(script: string): boolean {
+  return script.includes('"--disable-auto"') && script.includes("gh(");
 }
 
 function reusableChecksOutCallerPrCode(yaml: string): boolean {
@@ -91,10 +58,6 @@ function reusableChecksOutCallerPrCode(yaml: string): boolean {
   return !checkoutPinsOrgReusables && refsPullRequest;
 }
 
-function hasReadOnlyJobPermissions(yaml: string): boolean {
-  return yaml.includes("contents: read") && yaml.includes("pull-requests: read");
-}
-
 let failed = false;
 
 function fail(path: string, message: string): void {
@@ -103,10 +66,6 @@ function fail(path: string, message: string): void {
 }
 
 const reusable = load(REUSABLE);
-
-if (reusable.includes("pull_request_target:")) {
-  fail(REUSABLE, "must not use pull_request_target");
-}
 
 if (!reusable.includes("types: [opened, synchronize, reopened, ready_for_review]")) {
   fail(
@@ -124,16 +83,28 @@ if (
   );
 }
 
-for (const { line, text } of linesWithUses(reusable)) {
-  if (text.includes("uses: ./")) {
-    continue;
-  }
-  if (!usesLineHas40CharSha(text)) {
-    fail(REUSABLE, `line ${line} uses: must pin a full commit SHA: ${text}`);
-  }
-  if (!usesLineHasFullShaPin(text) && text.includes("@")) {
-    fail(REUSABLE, `line ${line} uses: must include # vX.Y.Z comment: ${text}`);
-  }
+if (!reusable.includes("dependabot-auto-merge-preflight.ts")) {
+  fail(REUSABLE, "must sparse-checkout dependabot-auto-merge-preflight.ts");
+}
+
+if (!reusable.includes("auto-merge-repository-preflight.ts")) {
+  fail(REUSABLE, "must sparse-checkout auto-merge-repository-preflight.ts");
+}
+
+if (!reusable.includes("id: repository-preflight")) {
+  fail(REUSABLE, "must run repository ci-passed safety preflight before eligibility");
+}
+
+if (!reusable.includes("steps.repository-preflight.outputs.proceed == 'true'")) {
+  fail(REUSABLE, "downstream steps must gate on repository safety preflight proceed");
+}
+
+if (!reusable.includes("id: dependabot-preflight")) {
+  fail(REUSABLE, "must run Dependabot pull request preflight before fetch-metadata");
+}
+
+if (!reusable.includes("steps.dependabot-preflight.outputs.proceed == 'true'")) {
+  fail(REUSABLE, "dependabot/fetch-metadata must run only when preflight proceed is true");
 }
 
 const requiredPins: { needle: string; label: string }[] = [
@@ -162,11 +133,19 @@ if (!scriptCallsGhPrMergeAuto(script)) {
   fail(".github/scripts/auto-merge.ts", 'must call gh(["pr", "merge", ..., "--auto", ...]) only');
 }
 
+if (!scriptCallsGhPrMergeDisableAuto(script)) {
+  fail(".github/scripts/auto-merge.ts", 'must call gh pr merge --disable-auto when eligibility fails');
+}
+
 if (!script.includes("withGhRepo") || !script.includes("GH_REPO")) {
   fail(
     ".github/scripts/auto-merge.ts",
     "gh() must pass -R and GH_REPO so pr review/merge work without a workspace git repo",
   );
+}
+
+if (!reusable.includes("Sync auto-merge state")) {
+  fail(REUSABLE, "final step must sync auto-merge (enable or disable)");
 }
 
 if (reusable.includes("persist-credentials: true")) {
@@ -175,10 +154,6 @@ if (reusable.includes("persist-credentials: true")) {
 
 if (reusableChecksOutCallerPrCode(reusable)) {
   fail(REUSABLE, "must not checkout pull request code from the caller repository");
-}
-
-if (!hasReadOnlyJobPermissions(reusable)) {
-  fail(REUSABLE, "job permissions must be contents: read and pull-requests: read only");
 }
 
 if (!reusable.includes("permission-pull-requests: write")) {

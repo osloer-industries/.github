@@ -20,7 +20,9 @@ test("withGhRepo prepends -R for every gh subcommand shape used by auto-merge", 
       "labels[]=release:major-hold",
     ],
     ["pr", "comment", "1", "--body", "Auto-merge withheld"],
+    ["pr", "view", "1", "--json", "autoMergeRequest"],
     ["pr", "merge", "1", "--auto", "--squash"],
+    ["pr", "merge", "1", "--disable-auto"],
   ];
   for (const args of cases) {
     assert.deepEqual(withGhRepo(args, REPOSITORY), ["-R", REPOSITORY, ...args]);

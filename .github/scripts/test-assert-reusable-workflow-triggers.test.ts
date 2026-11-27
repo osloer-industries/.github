@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = fileURLToPath(
@@ -71,7 +72,14 @@ jobs:
       - run: echo bad
 `;
 
-assert.equal(runInRepo({ "good.yml": GOOD }).status, 0);
-assert.notEqual(runInRepo({ "bad-event.yml": BAD_EVENT }).status, 0);
-assert.notEqual(runInRepo({ "bad-inputs.yml": BAD_INPUTS }).status, 0);
-console.log("assert-reusable-workflow-triggers contract self-test OK");
+test("assert-reusable-workflow-triggers accepts valid dual-trigger workflows", () => {
+  assert.equal(runInRepo({ "good.yml": GOOD }).status, 0);
+});
+
+test("assert-reusable-workflow-triggers rejects caller event_name branching", () => {
+  assert.notEqual(runInRepo({ "bad-event.yml": BAD_EVENT }).status, 0);
+});
+
+test("assert-reusable-workflow-triggers rejects job-level inputs without fallbacks", () => {
+  assert.notEqual(runInRepo({ "bad-inputs.yml": BAD_INPUTS }).status, 0);
+});

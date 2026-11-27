@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = fileURLToPath(
-  new URL("./assert-pr-title-workflow.ts", import.meta.url),
+  new URL("./assert-reusable-workflow-triggers-unit-workflow.ts", import.meta.url),
 );
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-test("assert-pr-title-workflow contract passes on repository workflows", () => {
+test("assert-reusable-workflow-triggers-unit-workflow passes on repository", () => {
   const result = spawnSync(
     process.execPath,
     ["--experimental-strip-types", SCRIPT],
