@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/osloer-industries/.github/compare/v0.1.10...v0.1.11) (2026-11-26)
+
+
+### Bug Fixes
+
+* **auto-merge:** pass explicit repo to gh pr review/merge ([#64](https://github.com/osloer-industries/.github/issues/64)) ([667ad75](https://github.com/osloer-industries/.github/commit/667ad758d3b6826ea30ce99cbbc160c32082a061))
+
 ## [0.1.10](https://github.com/osloer-industries/.github/compare/v0.1.9...v0.1.10) (2026-11-24)
 
 
