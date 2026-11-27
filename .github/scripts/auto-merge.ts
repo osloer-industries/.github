@@ -161,19 +161,28 @@ export function evaluateEligibility(cfg: AutoMergeEnv): EligibilityReason {
   };
 }
 
+export function ghEnv(token: string, repository: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GH_TOKEN: token,
+    GITHUB_REPOSITORY: repository,
+    GH_REPO: repository,
+  };
+}
+
+/** Prepend global `-R` so gh works when the runner cwd is not a git repository. */
+export function withGhRepo(args: string[], repository: string): string[] {
+  return ["-R", repository, ...args];
+}
+
 export function gh(
   args: string[],
   token: string,
   repository: string,
 ): { ok: boolean; stdout: string; stderr: string; status: number } {
-  const env = {
-    ...process.env,
-    GH_TOKEN: token,
-    GITHUB_REPOSITORY: repository,
-  };
-  const result = spawnSync(ghBinary(), args, {
+  const result = spawnSync(ghBinary(), withGhRepo(args, repository), {
     encoding: "utf8",
-    env,
+    env: ghEnv(token, repository),
     stdio: ["ignore", "pipe", "pipe"],
   });
   return {

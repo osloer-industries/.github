@@ -22,6 +22,18 @@ on:
           non-pull_request events; a single job id only (no lists).
         type: string
         default: sonar-zero-open-issues
+      codeql-job:
+        description: Caller needs job id for CodeQL (skipped on pull_request when off-PR scanning)
+        type: string
+        default: codeql
+      workflow-security-job:
+        description: Caller needs job id for workflow security (may be skipped when workflows unchanged)
+        type: string
+        default: workflow-security
+      ci-paths-scope-job:
+        description: Caller needs job id for CI paths scope (docs-only skip contract)
+        type: string
+        default: ci-paths-scope
 
 jobs:
   ci-passed:
@@ -47,4 +59,7 @@ jobs:
           NEEDS_JSON: ${{ inputs.needs-json }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           SONAR_ZERO_ISSUES_JOB: ${{ inputs.sonar-zero-issues-job }}
+          CODEQL_JOB: ${{ inputs.codeql-job }}
+          WORKFLOW_SECURITY_JOB: ${{ inputs.workflow-security-job }}
+          CI_PATHS_SCOPE_JOB: ${{ inputs.ci-paths-scope-job }}
         run: node reusables/.github/scripts/ci-passed-gate.ts

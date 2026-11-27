@@ -100,6 +100,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+      - name: Run auto-merge gh repo targeting unit tests
+        run: node --test .github/scripts/test-auto-merge-gh.test.ts
       - name: Run auto-merge eligibility unit tests
         run: node --test .github/scripts/test-auto-merge-eligibility.test.ts
       - name: Run Dependabot auto-merge preflight unit tests
@@ -114,6 +116,8 @@ jobs:
         run: node --test .github/scripts/test-assert-auto-merge-workflow.test.ts
       - name: Run ci-passed gate unit tests
         run: node --test .github/scripts/test-ci-passed-gate.test.ts
+      - name: Run ci-paths-scope CodeQL unit tests
+        run: node --test .github/scripts/test-ci-paths-run-codeql.test.ts
       - name: Run ci-passed workflow contract tests
         run: node --test .github/scripts/test-assert-ci-passed-workflow.test.ts
       - name: Run nested reusable permission contract tests

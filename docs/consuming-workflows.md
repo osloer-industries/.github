@@ -411,7 +411,7 @@ jobs:
 
 Repositories that rely only on SonarCloud automatic analysis (no CI scan) can omit `needs: analyze` and call `sonarcloud-zero-issues.yml` alone; the gate waits until the head commit appears on `api/project_pull_requests/list` **and** a pull-request REPORT compute-engine task reaches **SUCCESS** (via `api/ce/activity` / `api/ce/task`).
 
-Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). No extra inputs such as `reusables-ref` are required.
+Pin `uses:` to a **full commit SHA** on `osloer-industries/.github` (Dependabot `ci(deps)` bumps). The reusable job sparse-checkouts the gate script at **`job.workflow_sha`** (the commit in the `uses:` pin), not `github.workflow_sha` (the caller workflow on the caller repo). Callers that want the composite action without a nested reusable should call **`.github/actions/ci-passed-gate@<pin-sha>`** from an inline job (static SHA in `uses:`); the reusable workflow does not support dynamic composite `uses:` refs (actionlint).
 
 Callers need `permissions: contents: read` so the job can check out the org `.github` repository.
 
@@ -564,11 +564,26 @@ Rely on org rulesets / branch protection **required status checks** so auto-merg
 
 ### ci-passed (single required check)
 
-Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success`. Skipped, cancelled, and failed upstream jobs fail closed **except** for the Sonar zero-issues caller job (reusable input **`sonar-zero-issues-job`**, default **`sonar-zero-open-issues`**): on `push` and other non–`pull_request` events, a **skipped** result for **only that job** is allowed when the caller uses `if: github.event_name == 'pull_request'` on it. On `pull_request`, skipped/cancelled/missing/failure for that job still fails **`ci-passed`**. Any other job skipped on `push` still fails **`ci-passed`**.
+Run quality/tests, workflow-security, CodeQL, SonarCloud zero-open-issues, and any repo-specific jobs in **one** CI workflow, then end with a job named **`ci-passed`** that `needs:` every upstream job, uses `if: always()`, and fails unless each needed job’s `result` is `success`.
 
-**Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required—`ci-passed` already aggregates them. Auto-merge (`auto-merge.yml`) relies on required checks; with only `ci-passed` required, Dependabot and Release Please PRs merge once the full pipeline is green.
+**Preferred aggregate (saves nested workflow billing):** call the composite action
+`osloer-industries/.github/.github/actions/ci-passed-gate@REUSABLES_SHA` on a single runner job. The legacy
+`ci-passed.yml` reusable remains for older pins.
 
-**Reusable inputs:** `needs-json` (required), `sonar-zero-issues-job` (single caller `needs` job id for Sonar zero-issues; default `sonar-zero-open-issues`; use only to rename that job, not to register other PR-only jobs).
+**Selective `skipped` tolerance** (see `.github/scripts/ci-passed-gate.ts`):
+
+| Job | May be `skipped` when |
+| --- | --- |
+| `sonar-zero-open-issues` | non–`pull_request` events (PR-only caller job) |
+| `codeql` | `pull_request` when `run-codeql` is `false` (docs/config-only); always on `push` / `schedule` / `merge_group` when `run-full-ci` |
+| `workflow-security` | job-level `if` skipped the run (no workflow file changes) |
+| Heavy jobs (`quality`, scanners, …) | `ci-paths-scope` output `run-full-ci` is `false` (docs-only PR) |
+
+**Org rulesets:** require only the check **`ci-passed`**. Do not list individual scanner jobs as required.
+
+**Paths scope:** call `ci-paths-scope.yml` first; gate other jobs with `if: needs.ci-paths-scope.outputs.run-full-ci == 'true'`. Run workflow-security only when `workflows-changed == 'true'` (still under full CI). Gate CodeQL with `run-codeql` on pull requests (source, scripts, `*.{ts,js}`, `.github/workflows/**`); keep CodeQL on `push`, `schedule`, and `merge_group`. Skip CI Sonar jobs on pull requests when `product-code-changed == 'false'` (workflow pins only); `ci-passed-gate` allows that skip.
+
+**PR title caller:** `types: [opened, reopened, edited]` only (not `synchronize`); define `concurrency` on the caller workflow.
 
 ```yaml
 name: CI
@@ -577,6 +592,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
@@ -587,23 +604,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-paths-scope:
+    uses: osloer-industries/.github/.github/workflows/ci-paths-scope.yml@REUSABLES_SHA # v0.x.y
+
   quality:
+    needs: ci-paths-scope
+    if: needs.ci-paths-scope.outputs.run-full-ci == 'true'
     uses: osloer-industries/.github/.github/workflows/node-npm-quality.yml@REUSABLES_SHA # v0.x.y
 
   workflow-security:
+    needs: ci-paths-scope
+    if: |
+      needs.ci-paths-scope.outputs.run-full-ci == 'true' &&
+      (github.event_name == 'push' || needs.ci-paths-scope.outputs.workflows-changed == 'true')
     uses: osloer-industries/.github/.github/workflows/workflow-security.yml@REUSABLES_SHA # v0.x.y
+    permissions:
+      contents: read
+      actions: read
 
   codeql:
+    needs: ci-paths-scope
+    if: |
+      needs.ci-paths-scope.outputs.run-full-ci == 'true' &&
+      (
+        github.event_name != 'pull_request' ||
+        needs.ci-paths-scope.outputs.run-codeql == 'true'
+      )
     uses: osloer-industries/.github/.github/workflows/codeql-javascript-typescript.yml@REUSABLES_SHA # v0.x.y
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
 
   sonar-analyze:
+    needs: ci-paths-scope
+    if: needs.ci-paths-scope.outputs.run-full-ci == 'true'
     uses: osloer-industries/.github/.github/workflows/sonarqube-cloud-node.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   sonar-zero-open-issues:
-    if: github.event_name == 'pull_request'
-    needs: sonar-analyze
+    if: github.event_name == 'pull_request' && needs.ci-paths-scope.outputs.run-full-ci == 'true'
+    needs:
+      - ci-paths-scope
+      - sonar-analyze
     uses: osloer-industries/.github/.github/workflows/sonarcloud-zero-issues.yml@REUSABLES_SHA # v0.x.y
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -611,18 +655,25 @@ jobs:
   ci-passed:
     name: ci-passed
     needs:
+      - ci-paths-scope
       - quality
       - workflow-security
       - codeql
       - sonar-analyze
       - sonar-zero-open-issues
     if: always()
-    uses: osloer-industries/.github/.github/workflows/ci-passed.yml@REUSABLES_SHA # v0.x.y
-    with:
-      needs-json: ${{ toJSON(needs) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: osloer-industries/.github/.github/actions/ci-passed-gate@REUSABLES_SHA # v0.x.y
+        with:
+          needs-json: ${{ toJSON(needs) }}
+          github-event-name: ${{ github.event_name }}
 ```
 
-This repository’s [`ci.yml`](.github/workflows/ci.yml) ends with an **inlined** `ci-passed` job (same `ci-passed-gate.ts` logic as the reusable). [`workflow-security.yml`](.github/workflows/workflow-security.yml) still runs on the same events via its own `pull_request` / `push` trigger until actionlint accepts GitHub’s `$/` same-repository `uses:` form and callers can drop `./` without zizmor `self-repository` findings. **Consumer repositories** should run workflow-security inside the main CI workflow and list it under `ci-passed` `needs:` as in the example above; org rulesets should require only **`ci-passed`** there.
+This repository’s [`ci.yml`](.github/workflows/ci.yml) ends with an **inlined** `ci-passed` job (same `ci-passed-gate.ts` logic). [`workflow-security.yml`](.github/workflows/workflow-security.yml) still lists `pull_request` / `push` here so the gate runs on every change to this repository without a same-repo `workflow_call`.
 
 ### Workflow security (actionlint + zizmor)
 

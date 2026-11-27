@@ -47,6 +47,18 @@ if (!reusable.includes("sonar-zero-issues-job")) {
   fail(REUSABLE, "must accept sonar-zero-issues-job input for Sonar zero-issues caller job id");
 }
 
+if (!reusable.includes("ci-paths-scope-job")) {
+  fail(REUSABLE, "must accept ci-paths-scope-job input for docs-only CI scope");
+}
+
+if (!reusable.includes("codeql-job")) {
+  fail(REUSABLE, "must accept codeql-job input for off-PR CodeQL skip tolerance");
+}
+
+if (!reusable.includes("workflow-security-job")) {
+  fail(REUSABLE, "must accept workflow-security-job input for conditional skip tolerance");
+}
+
 if (!reusable.includes("SONAR_ZERO_ISSUES_JOB")) {
   fail(REUSABLE, "must pass sonar-zero-issues-job into SONAR_ZERO_ISSUES_JOB");
 }
@@ -76,11 +88,14 @@ if (!ciPassedJobUsesAlways(ci)) {
 const hasReusableCiPassed =
   ci.includes("uses: osloer-industries/.github/.github/workflows/ci-passed.yml@") ||
   ci.includes("uses: ./.github/workflows/ci-passed.yml");
+const hasCompositeCiPassed = ci.includes(
+  "uses: osloer-industries/.github/.github/actions/ci-passed-gate@",
+);
 const hasInlineCiPassed = ci.includes("node .github/scripts/ci-passed-gate.ts");
-if (!hasReusableCiPassed && !hasInlineCiPassed) {
+if (!hasReusableCiPassed && !hasInlineCiPassed && !hasCompositeCiPassed) {
   fail(
     CI_WORKFLOW,
-    "ci-passed must call the reusable workflow or run .github/scripts/ci-passed-gate.ts",
+    "ci-passed must call the reusable workflow, the ci-passed-gate composite action, or run .github/scripts/ci-passed-gate.ts",
   );
 }
 

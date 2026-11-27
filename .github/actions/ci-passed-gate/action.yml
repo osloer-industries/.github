@@ -1,0 +1,44 @@
+name: ci-passed gate
+description: Fail closed unless upstream workflow jobs succeeded (org aggregate check).
+inputs:
+  needs-json:
+    description: Serialized needs context from the ci-passed job (`toJSON(needs)`)
+    required: true
+  github-event-name:
+    description: Override for GITHUB_EVENT_NAME (defaults to the runner event)
+    required: false
+    default: ""
+  sonar-zero-issues-job:
+    description: Caller needs job id for Sonar zero-open-issues
+    required: false
+    default: sonar-zero-open-issues
+  codeql-job:
+    description: Caller needs job id for CodeQL
+    required: false
+    default: codeql
+  workflow-security-job:
+    description: Caller needs job id for workflow security
+    required: false
+    default: workflow-security
+  ci-paths-scope-job:
+    description: Caller needs job id for CI paths scope
+    required: false
+    default: ci-paths-scope
+  ci-passed-job:
+    description: Caller job id for this aggregate job (docs-only skip exemption)
+    required: false
+    default: ci-passed
+runs:
+  using: composite
+  steps:
+    - name: Require every upstream job to succeed
+      shell: bash
+      env:
+        NEEDS_JSON: ${{ inputs.needs-json }}
+        GITHUB_EVENT_NAME: ${{ inputs.github-event-name != '' && inputs.github-event-name || github.event_name }}
+        SONAR_ZERO_ISSUES_JOB: ${{ inputs.sonar-zero-issues-job }}
+        CODEQL_JOB: ${{ inputs.codeql-job }}
+        WORKFLOW_SECURITY_JOB: ${{ inputs.workflow-security-job }}
+        CI_PATHS_SCOPE_JOB: ${{ inputs.ci-paths-scope-job }}
+        CI_PASSED_JOB: ${{ inputs.ci-passed-job }}
+      run: node --experimental-strip-types "${GITHUB_ACTION_PATH}/../../scripts/ci-passed-gate.ts"
